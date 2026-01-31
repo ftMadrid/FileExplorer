@@ -11,6 +11,6 @@ int main(int argc, char *argv[])
     QApplication a(argc, argv);
     MainScreen w;
     w.show();
-    cout << "Hello World!" <<endl;
+    cout << "Loading the program..." <<endl;
     return a.exec();
 }

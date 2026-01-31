@@ -17,6 +17,10 @@ public:
     MainScreen(QWidget *parent = nullptr);
     ~MainScreen();
 
+private slots:
+
+    void on_notepad_clicked();
+
 private:
     Ui::MainScreen *ui;
 };
