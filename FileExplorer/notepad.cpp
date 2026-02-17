@@ -4,6 +4,8 @@
 #include <QFile>        // to manage the file
 #include <QTextStream>  // to read the text
 #include <QMessageBox>
+#include <QDirIterator>
+#include <QDataStream>
 
 Notepad::Notepad(QWidget *parent)
     : QMainWindow(parent)
@@ -12,6 +14,7 @@ Notepad::Notepad(QWidget *parent)
     ui->setupUi(this);
     this->setFixedSize(this->size());
     this->setFixedSize(800, 600);
+    ui->plainTextEdit->setContextMenuPolicy(Qt::CustomContextMenu);
 }
 
 Notepad::~Notepad()
@@ -19,46 +22,84 @@ Notepad::~Notepad()
     delete ui;
 }
 
-void Notepad::on_actionLoad_File_triggered()
-{
-    QString fileName = QFileDialog::getOpenFileName(this, "Open file");
+void Notepad::on_actionLoad_File_triggered() {
+    // 1. Preguntar por el archivo .bin
+    QString binFile = QFileDialog::getOpenFileName(this, "Abrir archivo empaquetado", "", "Archivo Binario (*.bin)");
+    if (binFile.isEmpty()) return;
 
-    if (fileName.isEmpty()) return;
+    // 2. Preguntar dónde queremos extraer todo
+    QString extractPath = QFileDialog::getExistingDirectory(this, "Selecciona carpeta de destino");
+    if (extractPath.isEmpty()) return;
 
-    currentFilePath = fileName; // save the path!!!!!!!
-
-    QFile file(fileName);
-    if (file.open(QIODevice::ReadOnly | QIODevice::Text)) {
-        QTextStream input(&file);
-        ui->plainTextEdit->setPlainText(input.readAll());
-        file.close();
-        this->setWindowTitle("Notepad - " + fileName);
-    }
+    // 3. Llamar a la lógica
+    desempaquetarBinario(binFile, extractPath);
 }
 
 
-void Notepad::on_actionSave_File_triggered()
+void Notepad::on_actionSave_File_triggered() {
+    // 1. Preguntar qué carpeta queremos guardar
+    QString sourceDir = QFileDialog::getExistingDirectory(this, "Selecciona la carpeta a empaquetar");
+    if (sourceDir.isEmpty()) return;
+
+    // 2. Preguntar dónde guardar el archivo .bin
+    QString binFile = QFileDialog::getSaveFileName(this, "Guardar como...", "", "Archivo Binario (*.bin)");
+    if (binFile.isEmpty()) return;
+
+    // 3. Llamar a la lógica
+    empaquetarCarpeta(binFile, sourceDir);
+}
+
+void Notepad::empaquetarCarpeta(QString binFilePath, QString sourceDirPath) {
+    QFile binFile(binFilePath);
+    if (!binFile.open(QIODevice::WriteOnly)) return;
+
+    QDataStream out(&binFile);
+    out.setVersion(QDataStream::Qt_5_15);
+
+    QDirIterator it(sourceDirPath, QDir::Files, QDirIterator::Subdirectories);
+    while (it.hasNext()) {
+        it.next();
+        QFile entryFile(it.filePath());
+        if (entryFile.open(QIODevice::ReadOnly)) {
+            QString relativePath = QDir(sourceDirPath).relativeFilePath(it.filePath());
+            out << relativePath;     // Escribimos nombre
+            out << entryFile.readAll(); // Escribimos contenido
+            entryFile.close();
+        }
+    }
+    this->statusBar()->showMessage("¡Carpeta empaquetada con éxito!", 3000);
+}
+
+void Notepad::desempaquetarBinario(QString binFilePath, QString extractPath) {
+    QFile binFile(binFilePath);
+    if (!binFile.open(QIODevice::ReadOnly)) return;
+
+    QDataStream in(&binFile);
+    while (!in.atEnd()) {
+        QString fileName;
+        QByteArray fileData;
+        in >> fileName >> fileData; // Leemos en el mismo orden
+
+        QString fullPath = extractPath + "/" + fileName;
+        QDir().mkpath(QFileInfo(fullPath).absolutePath()); // Crea carpetas si no existen
+
+        QFile outFile(fullPath);
+        if (outFile.open(QIODevice::WriteOnly)) {
+            outFile.write(fileData);
+            outFile.close();
+        }
+    }
+    this->statusBar()->showMessage("¡Extracción completada!", 3000);
+}
+
+void Notepad::on_plainTextEdit_customContextMenuRequested(const QPoint &pos)
 {
-    // if the file is new we save as
-    if (currentFilePath.isEmpty()) {
-        currentFilePath = QFileDialog::getSaveFileName(this, "Save File", "", "File (*.txt)");
-    }
+    QMenu menu(this);
 
-    // just leave if the user cancel
-    if (currentFilePath.isEmpty()) return;
+    menu.addAction(ui->actionLoad_File); // O como se llamen tus acciones
+    menu.addSeparator();
+    menu.addAction(ui->actionSave_File);
 
-    // save in the origin path
-    QFile file(currentFilePath);
-    if (!file.open(QIODevice::WriteOnly | QIODevice::Text)) {
-        QMessageBox::critical(this, "Error", "The file cannot be saved!");
-        return;
-    }
-
-    QTextStream exit(&file);
-    exit << ui->plainTextEdit->toPlainText();
-    file.close();
-
-    // an announced to say that is saved (yeah yeah)
-    this->statusBar()->showMessage("File saved.", 2000);
+    menu.exec(ui->plainTextEdit->mapToGlobal(pos));
 }
 
