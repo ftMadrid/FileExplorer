@@ -28,6 +28,7 @@ public:
     void loadBinary(string filename);
     Node* searchNode(Node* current, string name);
     Node* findChild(Node* parent, string name);
+    Node* copyNode(Node* source, Node* newParent);
 };
 
 #endif

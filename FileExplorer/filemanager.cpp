@@ -18,16 +18,16 @@ void FileManager::deleteTree(Node* node) {
 void FileManager::addNode(Node* parentNode, string name, bool isFolder) {
     if (!parentNode) return;
 
-    Node* newNode = new Node(name, isFolder, parentNode); // pass parentNode here
+    Node* newNode = new Node(name, isFolder, parentNode);
 
     if (!parentNode->left) {
         parentNode->left = newNode;
     } else {
-        Node* temp = parentNode->left;
-        while (temp->right) {
-            temp = temp->right;
+        Node* tmp = parentNode->left;
+        while (tmp->right) {
+            tmp = tmp->right;
         }
-        temp->right = newNode;
+        tmp->right = newNode;
     }
 }
 
@@ -43,12 +43,12 @@ void FileManager::deleteNode(Node* target) {
     }
     // rights
     else {
-        Node* temp = p->left;
-        while (temp && temp->right != target) {
-            temp = temp->right;
+        Node* tmp = p->left;
+        while (tmp && tmp->right != target) {
+            tmp = tmp->right;
         }
-        if (temp) {
-            temp->right = target->right;
+        if (tmp) {
+            tmp->right = target->right;
         }
     }
 
@@ -149,12 +149,12 @@ Node* FileManager::findChild(Node* parent, string name) {
     if (!parent || !parent->left) return nullptr;
 
     // start at first child
-    Node* temp = parent->left;
-    while (temp) {
-        if (temp->name == name) {
-            return temp; // founded hehe
+    Node* tmp = parent->left;
+    while (tmp) {
+        if (tmp->name == name) {
+            return tmp; // founded hehe
         }
-        temp = temp->right; // brothers next
+        tmp = tmp->right; // brothers next
     }
     return nullptr;
 }
@@ -172,4 +172,19 @@ Node* FileManager::searchNode(Node* current, string name) {
 
     // right search
     return searchNode(current->right, name);
+}
+
+Node* FileManager::copyNode(Node* source, Node* newParent) {
+    if (!source) return nullptr;
+
+    // create the actual clone
+    Node* newNode = new Node(source->name, source->isFolder, newParent);
+    newNode->content = source->content;
+
+    // copy left
+    newNode->left = copyNode(source->left, newNode);
+    // copy right instead yeah yeah
+    newNode->right = copyNode(source->right, newParent);
+
+    return newNode;
 }

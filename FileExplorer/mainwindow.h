@@ -28,12 +28,14 @@ private slots:
 private:
     Ui::MainWindow *ui;
     FileManager manager;
+    Node* nodeToCopy = nullptr;
     void refreshUI();
     void drawTree(Node* node, QTreeWidgetItem* visualParent); // recursive draw
     Node* currentFolder;
     HistoryList history;
     void loadFolder(Node* folder, bool addToHistory = true);
     QString getPath(Node* node);
+    void pasteLogic(Node* destination);
 
 protected:
     // func just to deselected an item when we clicked in another place
