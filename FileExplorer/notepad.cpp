@@ -38,7 +38,7 @@ void Notepad::on_actionSave_File_triggered() {
     // save the whole tree to the binary file for persistence
     fileManager->saveBinary("System777.bin");
 
-    this->statusBar()->showMessage("File saved successfully inside the Binary Tree!", 3000);
+    this->statusBar()->showMessage("File saved!", 3000);
 }
 
 void Notepad::handleClose() {

@@ -15,18 +15,58 @@ void FileManager::deleteTree(Node* node) {
     delete node;
 }
 
-void FileManager::addNode(Node* parent, string name, bool isFolder) {
-    if (!parent) return;
-    Node* newNode = new Node(name, isFolder);
-    if (!parent->left) {
-        parent->left = newNode;
+void FileManager::addNode(Node* parentNode, string name, bool isFolder) {
+    if (!parentNode) return;
+
+    Node* newNode = new Node(name, isFolder, parentNode); // pass parentNode here
+
+    if (!parentNode->left) {
+        parentNode->left = newNode;
     } else {
-        Node* temp = parent->left;
+        Node* temp = parentNode->left;
         while (temp->right) {
             temp = temp->right;
         }
         temp->right = newNode;
     }
+}
+
+void FileManager::deleteNode(Node* target) {
+    if (!target || target == root) return; // cant delete C:/ [i know you want to do it inge]
+
+    Node* p = target->parent;
+    if (!p) return;
+
+    // lefts
+    if (p->left == target) {
+        p->left = target->right;
+    }
+    // rights
+    else {
+        Node* temp = p->left;
+        while (temp && temp->right != target) {
+            temp = temp->right;
+        }
+        if (temp) {
+            temp->right = target->right;
+        }
+    }
+
+    // get out the node from the others to delete
+    target->right = nullptr;
+    deleteTree(target);
+}
+
+void FileManager::renameNode(Node* target, string newName) {
+    if (!target) return;
+
+    // check if is file (.txt)
+    if (!target->isFolder) {
+        if (newName.length() < 4 || newName.substr(newName.length() - 4) != ".txt") {
+            newName += ".txt";
+        }
+    }
+    target->name = newName;
 }
 
 void FileManager::saveBinary(string filename) {
@@ -60,7 +100,7 @@ void FileManager::saveTree(Node* node, ofstream& out) {
 void FileManager::loadBinary(string filename) {
     ifstream in(filename, std::ios::binary);
     if (in.is_open()) {
-        Node* tempRoot = loadTree(in);
+        Node* tempRoot = loadTree(in, nullptr);
         if (tempRoot) {
             deleteTree(root);
             root = tempRoot;
@@ -69,7 +109,7 @@ void FileManager::loadBinary(string filename) {
     }
 }
 
-Node* FileManager::loadTree(ifstream& in) {
+Node* FileManager::loadTree(ifstream& in, Node* parentNode) {
     char isNull;
     if (!in.read(&isNull, sizeof(char)) || isNull == 1) return nullptr;
 
@@ -87,7 +127,7 @@ Node* FileManager::loadTree(ifstream& in) {
     in.read(&folderFlag, sizeof(char));
     bool isFolder = (folderFlag == 1);
 
-    Node* newNode = new Node(name, isFolder);
+    Node* newNode = new Node(name, isFolder, parentNode);
 
     int contentSize = 0;
     in.read((char*)&contentSize, sizeof(int));
@@ -99,7 +139,37 @@ Node* FileManager::loadTree(ifstream& in) {
         delete[] cBuffer;
     }
 
-    newNode->left = loadTree(in);
-    newNode->right = loadTree(in);
+    newNode->left = loadTree(in, newNode);
+    newNode->right = loadTree(in, parentNode);
+
     return newNode;
+}
+
+Node* FileManager::findChild(Node* parent, string name) {
+    if (!parent || !parent->left) return nullptr;
+
+    // start at first child
+    Node* temp = parent->left;
+    while (temp) {
+        if (temp->name == name) {
+            return temp; // founded hehe
+        }
+        temp = temp->right; // brothers next
+    }
+    return nullptr;
+}
+
+Node* FileManager::searchNode(Node* current, string name) {
+    if (!current) return nullptr;
+
+    if (current->name == name) {
+        return current;
+    }
+
+    // left search
+    Node* found = searchNode(current->left, name);
+    if (found) return found;
+
+    // right search
+    return searchNode(current->right, name);
 }

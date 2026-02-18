@@ -11,8 +11,8 @@ using std::string;
 
 class FileManager {
 private:
-    void saveTree(Node* node, ofstream& out);
-    Node* loadTree(ifstream& in);
+    Node* loadTree(std::ifstream& in, Node* parentNode);
+    void saveTree(Node* node, std::ofstream& out);
     void deleteTree(Node* node);
 
 public:
@@ -22,8 +22,12 @@ public:
     ~FileManager();
 
     void addNode(Node* parent, string name, bool isFolder);
+    void deleteNode(Node* target);
+    void renameNode(Node* target, string newName);
     void saveBinary(string filename);
     void loadBinary(string filename);
+    Node* searchNode(Node* current, string name);
+    Node* findChild(Node* parent, string name);
 };
 
 #endif

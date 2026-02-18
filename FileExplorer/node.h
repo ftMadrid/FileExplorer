@@ -12,8 +12,9 @@ public:
     string content;
     Node* left;
     Node* right;
+    Node* parent;
 
-    Node(string name, bool isFolder);
+    Node(string name, bool isFolder, Node* parent = nullptr);
 };
 
 #endif

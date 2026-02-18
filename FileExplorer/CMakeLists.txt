@@ -27,6 +27,7 @@ if(${QT_VERSION_MAJOR} GREATER_EQUAL 6)
         mainwindow.h mainwindow.cpp mainwindow.ui
         node.h node.cpp
         filemanager.h filemanager.cpp
+        historylist.h historylist.cpp
 
 
 
