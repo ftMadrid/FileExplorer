@@ -25,6 +25,9 @@ if(${QT_VERSION_MAJOR} GREATER_EQUAL 6)
         ${PROJECT_SOURCES}
         notepad.h notepad.cpp notepad.ui
         mainwindow.h mainwindow.cpp mainwindow.ui
+        node.h node.cpp
+        filemanager.h filemanager.cpp
+
 
 
     )

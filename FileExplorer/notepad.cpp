@@ -1,104 +1,56 @@
 #include "notepad.h"
 #include "ui_notepad.h"
-#include <QFileDialog> // to open the search window
-#include <QFile>        // to manage the file
-#include <QTextStream>  // to read the text
 #include <QMessageBox>
-#include <QDirIterator>
-#include <QDataStream>
+#include <QMenu>
 
-Notepad::Notepad(QWidget *parent)
+Notepad::Notepad(Node* targetNode, FileManager* manager, QWidget *parent)
     : QMainWindow(parent)
     , ui(new Ui::Notepad)
+    , currentNode(targetNode)
+    , fileManager(manager)
 {
     ui->setupUi(this);
-    this->setFixedSize(this->size());
     this->setFixedSize(800, 600);
     ui->plainTextEdit->setContextMenuPolicy(Qt::CustomContextMenu);
+
+    if (currentNode) {
+        this->setWindowTitle("Editing: " + QString::fromStdString(currentNode->name));
+        loadNodeContent();
+    }
 }
 
-Notepad::~Notepad()
-{
+Notepad::~Notepad() {
     delete ui;
 }
 
-void Notepad::on_actionLoad_File_triggered() {
-    // 1. Preguntar por el archivo .bin
-    QString binFile = QFileDialog::getOpenFileName(this, "Abrir archivo empaquetado", "", "Archivo Binario (*.bin)");
-    if (binFile.isEmpty()) return;
-
-    // 2. Preguntar dónde queremos extraer todo
-    QString extractPath = QFileDialog::getExistingDirectory(this, "Selecciona carpeta de destino");
-    if (extractPath.isEmpty()) return;
-
-    // 3. Llamar a la lógica
-    desempaquetarBinario(binFile, extractPath);
+void Notepad::loadNodeContent() {
+    if (currentNode) {
+        ui->plainTextEdit->setPlainText(QString::fromStdString(currentNode->content));
+    }
 }
-
 
 void Notepad::on_actionSave_File_triggered() {
-    // 1. Preguntar qué carpeta queremos guardar
-    QString sourceDir = QFileDialog::getExistingDirectory(this, "Selecciona la carpeta a empaquetar");
-    if (sourceDir.isEmpty()) return;
+    if (!currentNode) return;
 
-    // 2. Preguntar dónde guardar el archivo .bin
-    QString binFile = QFileDialog::getSaveFileName(this, "Guardar como...", "", "Archivo Binario (*.bin)");
-    if (binFile.isEmpty()) return;
+    // update the nodes content in memory
+    currentNode->content = ui->plainTextEdit->toPlainText().toStdString();
 
-    // 3. Llamar a la lógica
-    empaquetarCarpeta(binFile, sourceDir);
+    // save the whole tree to the binary file for persistence
+    fileManager->saveBinary("System777.bin");
+
+    this->statusBar()->showMessage("File saved successfully inside the Binary Tree!", 3000);
 }
 
-void Notepad::empaquetarCarpeta(QString binFilePath, QString sourceDirPath) {
-    QFile binFile(binFilePath);
-    if (!binFile.open(QIODevice::WriteOnly)) return;
-
-    QDataStream out(&binFile);
-    out.setVersion(QDataStream::Qt_5_15);
-
-    QDirIterator it(sourceDirPath, QDir::Files, QDirIterator::Subdirectories);
-    while (it.hasNext()) {
-        it.next();
-        QFile entryFile(it.filePath());
-        if (entryFile.open(QIODevice::ReadOnly)) {
-            QString relativePath = QDir(sourceDirPath).relativeFilePath(it.filePath());
-            out << relativePath;     // Escribimos nombre
-            out << entryFile.readAll(); // Escribimos contenido
-            entryFile.close();
-        }
-    }
-    this->statusBar()->showMessage("¡Carpeta empaquetada con éxito!", 3000);
+void Notepad::handleClose() {
+    this->close();
 }
 
-void Notepad::desempaquetarBinario(QString binFilePath, QString extractPath) {
-    QFile binFile(binFilePath);
-    if (!binFile.open(QIODevice::ReadOnly)) return;
-
-    QDataStream in(&binFile);
-    while (!in.atEnd()) {
-        QString fileName;
-        QByteArray fileData;
-        in >> fileName >> fileData; // Leemos en el mismo orden
-
-        QString fullPath = extractPath + "/" + fileName;
-        QDir().mkpath(QFileInfo(fullPath).absolutePath()); // Crea carpetas si no existen
-
-        QFile outFile(fullPath);
-        if (outFile.open(QIODevice::WriteOnly)) {
-            outFile.write(fileData);
-            outFile.close();
-        }
-    }
-    this->statusBar()->showMessage("¡Extracción completada!", 3000);
-}
-
-void Notepad::on_plainTextEdit_customContextMenuRequested(const QPoint &pos)
-{
+void Notepad::on_plainTextEdit_customContextMenuRequested(const QPoint &pos) {
     QMenu menu(this);
-
-    menu.addAction(ui->actionLoad_File); // O como se llamen tus acciones
-    menu.addSeparator();
     menu.addAction(ui->actionSave_File);
+    menu.addSeparator();
+
+    menu.addAction("Close Notepad", this, &Notepad::handleClose);
 
     menu.exec(ui->plainTextEdit->mapToGlobal(pos));
 }

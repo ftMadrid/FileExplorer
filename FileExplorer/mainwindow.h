@@ -2,6 +2,8 @@
 #define MAINWINDOW_H
 
 #include <QMainWindow>
+#include "filemanager.h"
+#include <QTreeWidgetItem>
 
 namespace Ui {
 class MainWindow;
@@ -20,6 +22,9 @@ private slots:
 
 private:
     Ui::MainWindow *ui;
+    FileManager manager;
+    void refreshUI();
+    void drawTree(Node* node, QTreeWidgetItem* visualParent); // recursive draw
 };
 
 #endif // MAINWINDOW_H

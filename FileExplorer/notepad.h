@@ -2,6 +2,8 @@
 #define NOTEPAD_H
 
 #include <QMainWindow>
+#include "node.h"
+#include "filemanager.h"
 
 namespace Ui {
 class Notepad;
@@ -12,19 +14,19 @@ class Notepad : public QMainWindow
     Q_OBJECT
 
 public:
-    explicit Notepad(QWidget *parent = nullptr);
+    explicit Notepad(Node* targetNode, FileManager* manager, QWidget *parent = nullptr);
     ~Notepad();
 
 private slots:
-    void on_actionLoad_File_triggered();
     void on_actionSave_File_triggered();
+    void handleClose();
     void on_plainTextEdit_customContextMenuRequested(const QPoint &pos);
 
 private:
     Ui::Notepad *ui;
-    QString currentFilePath;
-    void empaquetarCarpeta(QString binFilePath, QString sourceDirPath);
-    void desempaquetarBinario(QString binFilePath, QString extractPath);
+    Node* currentNode;
+    FileManager* fileManager;
+    void loadNodeContent();
 };
 
-#endif // NOTEPAD_H
+#endif
