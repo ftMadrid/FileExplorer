@@ -5,69 +5,38 @@ FileManager::FileManager() {
 }
 
 FileManager::~FileManager() {
-    deleteTree(root);
+    delete root;
 }
 
-void FileManager::deleteTree(Node* node) {
-    if (!node) return;
-    deleteTree(node->left);
-    deleteTree(node->right);
-    delete node;
-}
+void FileManager::addNode(Node* parent, string name, bool isFolder) {
+    if (!parent || !parent->isFolder) return;
+    if (findChild(parent, name)) return; // for duplicates
 
-void FileManager::addNode(Node* parentNode, string name, bool isFolder) {
-    if (!parentNode) return;
-
-    Node* newNode = new Node(name, isFolder, parentNode);
-
-    if (!parentNode->left) {
-        parentNode->left = newNode;
-    } else {
-        Node* tmp = parentNode->left;
-        while (tmp->right) {
-            tmp = tmp->right;
-        }
-        tmp->right = newNode;
-    }
-}
-
-void FileManager::deleteNode(Node* target) {
-    if (!target || target == root) return; // cant delete C:/ [i know you want to do it inge]
-
-    Node* p = target->parent;
-    if (!p) return;
-
-    // lefts
-    if (p->left == target) {
-        p->left = target->right;
-    }
-    // rights
-    else {
-        Node* tmp = p->left;
-        while (tmp && tmp->right != target) {
-            tmp = tmp->right;
-        }
-        if (tmp) {
-            tmp->right = target->right;
-        }
-    }
-
-    // get out the node from the others to delete
-    target->right = nullptr;
-    deleteTree(target);
+    Node* newNode = new Node(name, isFolder, parent);
+    parent->children.push_back(newNode);
 }
 
 void FileManager::renameNode(Node* target, string newName) {
     if (!target) return;
-
-    // check if is file (.txt)
-    if (!target->isFolder) {
-        if (newName.length() < 4 || newName.substr(newName.length() - 4) != ".txt") {
-            newName += ".txt";
-        }
-    }
     target->name = newName;
 }
+
+void FileManager::deleteNode(Node* target) {
+    if (!target || target == root) return;
+    Node* p = target->parent;
+    if (!p) return;
+
+    // search and delete vector from the father
+    for (auto it = p->children.begin(); it != p->children.end(); ++it) {
+        if (*it == target) {
+            delete *it;
+            p->children.erase(it);
+            break;
+        }
+    }
+}
+
+// --- persistent ---
 
 void FileManager::saveBinary(string filename) {
     ofstream out(filename, std::ios::binary);
@@ -78,23 +47,32 @@ void FileManager::saveBinary(string filename) {
 }
 
 void FileManager::saveTree(Node* node, ofstream& out) {
-    char isNull = (node == nullptr) ? 1 : 0;
-    out.write(&isNull, sizeof(char));
     if (!node) return;
 
+    // save name
     int nameSize = (int)node->name.size();
     out.write((char*)&nameSize, sizeof(int));
     out.write(node->name.c_str(), nameSize);
 
+    // save if its folder
     char folderFlag = node->isFolder ? 1 : 0;
     out.write(&folderFlag, sizeof(char));
 
+    // save content (only files)
     int contentSize = (int)node->content.size();
     out.write((char*)&contentSize, sizeof(int));
     out.write(node->content.c_str(), contentSize);
 
-    saveTree(node->left, out);
-    saveTree(node->right, out);
+    char favFlag = node->isFavorite ? 1 : 0;
+    out.write(&favFlag, sizeof(char));
+
+    // save the amount of childs
+    int childCount = (int)node->children.size();
+    out.write((char*)&childCount, sizeof(int));
+
+    for (Node* child : node->children) {
+        saveTree(child, out);
+    }
 }
 
 void FileManager::loadBinary(string filename) {
@@ -102,7 +80,7 @@ void FileManager::loadBinary(string filename) {
     if (in.is_open()) {
         Node* tempRoot = loadTree(in, nullptr);
         if (tempRoot) {
-            deleteTree(root);
+            delete root;
             root = tempRoot;
         }
         in.close();
@@ -110,12 +88,8 @@ void FileManager::loadBinary(string filename) {
 }
 
 Node* FileManager::loadTree(ifstream& in, Node* parentNode) {
-    char isNull;
-    if (!in.read(&isNull, sizeof(char)) || isNull == 1) return nullptr;
-
     int nameSize = 0;
-    in.read((char*)&nameSize, sizeof(int));
-    if (nameSize < 0 || nameSize > 1000) return nullptr;
+    if (!in.read((char*)&nameSize, sizeof(int))) return nullptr;
 
     char* buffer = new char[nameSize + 1];
     in.read(buffer, nameSize);
@@ -125,13 +99,12 @@ Node* FileManager::loadTree(ifstream& in, Node* parentNode) {
 
     char folderFlag;
     in.read(&folderFlag, sizeof(char));
-    bool isFolder = (folderFlag == 1);
 
-    Node* newNode = new Node(name, isFolder, parentNode);
+    Node* newNode = new Node(name, folderFlag == 1, parentNode);
 
     int contentSize = 0;
     in.read((char*)&contentSize, sizeof(int));
-    if (contentSize >= 0 && contentSize < 1000000) {
+    if (contentSize > 0) {
         char* cBuffer = new char[contentSize + 1];
         in.read(cBuffer, contentSize);
         cBuffer[contentSize] = '\0';
@@ -139,52 +112,55 @@ Node* FileManager::loadTree(ifstream& in, Node* parentNode) {
         delete[] cBuffer;
     }
 
-    newNode->left = loadTree(in, newNode);
-    newNode->right = loadTree(in, parentNode);
+    char favFlag;
+    in.read(&favFlag, sizeof(char));
+    newNode->isFavorite = (favFlag == 1); // load the state
+
+    // read amount of childs
+    int childCount = 0;
+    in.read((char*)&childCount, sizeof(int));
+
+    for (int i = 0; i < childCount; i++) {
+        Node* child = loadTree(in, newNode);
+        if (child) newNode->children.push_back(child);
+    }
 
     return newNode;
 }
 
 Node* FileManager::findChild(Node* parent, string name) {
-    if (!parent || !parent->left) return nullptr;
-
-    // start at first child
-    Node* tmp = parent->left;
-    while (tmp) {
-        if (tmp->name == name) {
-            return tmp; // founded hehe
-        }
-        tmp = tmp->right; // brothers next
+    if (!parent) return nullptr;
+    for (Node* child : parent->children) {
+        if (child->name == name) return child;
     }
     return nullptr;
 }
 
 Node* FileManager::searchNode(Node* current, string name) {
     if (!current) return nullptr;
+    if (current->name == name) return current;
 
-    if (current->name == name) {
-        return current;
+    for (Node* child : current->children) {
+        Node* found = searchNode(child, name);
+        if (found) return found;
     }
-
-    // left search
-    Node* found = searchNode(current->left, name);
-    if (found) return found;
-
-    // right search
-    return searchNode(current->right, name);
+    return nullptr;
 }
 
 Node* FileManager::copyNode(Node* source, Node* newParent) {
     if (!source) return nullptr;
 
-    // create the actual clone
     Node* newNode = new Node(source->name, source->isFolder, newParent);
     newNode->content = source->content;
 
-    // copy left
-    newNode->left = copyNode(source->left, newNode);
-    // copy right instead yeah yeah
-    newNode->right = copyNode(source->right, newParent);
+    // if we are copy from a father, we add into the list
+    if (newParent) {
+        newParent->children.push_back(newNode);
+    }
+
+    for (Node* child : source->children) {
+        copyNode(child, newNode);
+    }
 
     return newNode;
 }

@@ -5,6 +5,8 @@
 #include "filemanager.h"
 #include <QTreeWidgetItem>
 #include "historylist.h"
+#include <QStandardItemModel>
+#include <QList>
 
 namespace Ui {
 class MainWindow;
@@ -20,6 +22,7 @@ public:
 
 private slots:
     void on_PrincipalWidget_customContextMenuRequested(const QPoint &pos);
+    void on_favoritesTreeView_customContextMenuRequested(const QPoint &pos);
     void on_backButton_clicked();
     void on_nextButton_clicked();
     void on_fatherButton_clicked();
@@ -35,7 +38,13 @@ private:
     HistoryList history;
     void loadFolder(Node* folder, bool addToHistory = true);
     QString getPath(Node* node);
+    bool isAncestor(Node* potentialAncestor, Node* target);
     void pasteLogic(Node* destination);
+    void copyAction();
+    QStandardItemModel *favoritesModel;
+    QList<Node*> favoriteNodes;
+    void updateFavoritesUI();
+    void collectFavorites(Node* node);
 
 protected:
     // func just to deselected an item when we clicked in another place

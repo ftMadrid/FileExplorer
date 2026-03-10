@@ -9,17 +9,28 @@
 #include <QDebug>
 #include <QMouseEvent>
 
-MainWindow::MainWindow(QWidget *parent)
-    : QMainWindow(parent)
-    , ui(new Ui::MainWindow)
-{
+MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent) , ui(new Ui::MainWindow){
     ui->setupUi(this);
-    ui->PrincipalWidget->setContextMenuPolicy(Qt::CustomContextMenu);
 
+    ui->PrincipalWidget->setContextMenuPolicy(Qt::CustomContextMenu);
+    ui->favoritesTreeView->setContextMenuPolicy(Qt::CustomContextMenu);
+
+    favoritesModel = new QStandardItemModel(this);
+    ui->favoritesTreeView->setModel(favoritesModel);
+    ui->favoritesTreeView->setHeaderHidden(true);
+    ui->favoritesTreeView->setEditTriggers(QAbstractItemView::NoEditTriggers);
+
+    // load binary
     manager.loadBinary("System777.bin");
+
+    // refresh for the favorites
+    favoriteNodes.clear();
+    collectFavorites(manager.root);
+    updateFavoritesUI();
+
     qDebug() << "The data bin is at: " << QDir::currentPath();
 
-    // to open with double click [hacking time yeah]
+    // double click
     connect(ui->PrincipalWidget, &QTreeWidget::itemDoubleClicked, this, [=](QTreeWidgetItem* item) {
         Node* node = (Node*)item->data(0, Qt::UserRole).value<void*>();
         if (node) {
@@ -32,6 +43,39 @@ MainWindow::MainWindow(QWidget *parent)
         }
     });
 
+    // click on favorites
+    connect(ui->favoritesTreeView, &QTreeView::clicked, this, [=](const QModelIndex &index) {
+        Node* node = (Node*)index.data(Qt::UserRole).value<void*>();
+        if (node) {
+            if (node->isFolder) {
+                loadFolder(node);
+            } else {
+                Notepad *notepad = new Notepad(node, &manager);
+                notepad->show();
+                if (node->parent) loadFolder(node->parent);
+            }
+        }
+    });
+
+    // for remove click of favorites
+    connect(ui->favoritesTreeView, &QTreeView::customContextMenuRequested,
+            this, &MainWindow::on_favoritesTreeView_customContextMenuRequested);
+
+    // copy action
+    QAction* copyShortcut = new QAction(this);
+    copyShortcut->setShortcut(QKeySequence::Copy);
+    connect(copyShortcut, &QAction::triggered, this, &MainWindow::copyAction);
+    this->addAction(copyShortcut);
+
+    // paste action
+    QAction* pasteShortcut = new QAction(this);
+    pasteShortcut->setShortcut(QKeySequence::Paste);
+    connect(pasteShortcut, &QAction::triggered, this, [=]() {
+        pasteLogic(currentFolder);
+    });
+    this->addAction(pasteShortcut);
+
+    // load init folder
     loadFolder(manager.root, true);
     ui->PrincipalWidget->viewport()->installEventFilter(this);
 }
@@ -57,57 +101,43 @@ void MainWindow::drawTree(Node* node, QTreeWidgetItem* visualParent) {
         item = new QTreeWidgetItem(ui->PrincipalWidget);
     }
 
-    // item config
     item->setText(0, QString::fromStdString(node->name));
     item->setData(0, Qt::UserRole, QVariant::fromValue((void*)node));
 
-    // icons
     if (node->isFolder) {
         item->setIcon(0, style()->standardIcon(QStyle::SP_DirIcon));
     } else {
         item->setIcon(0, style()->standardIcon(QStyle::SP_FileIcon));
     }
 
-    item->setExpanded(true); // to see all expanded
+    item->setExpanded(true);
 
-    // LCRS recursive
-    if (node->left) drawTree(node->left, item);
-    if (node->right) drawTree(node->right, visualParent);
+    for (Node* child : node->children) {
+        drawTree(child, item);
+    }
 }
 
 void MainWindow::loadFolder(Node* folder, bool storeInHistory) {
     if (!folder || !folder->isFolder) return;
 
-    // save actual folder
     currentFolder = folder;
-
-    // save in history
     if (storeInHistory) {
         history.addStep(folder);
     }
 
-    // update the textEdit line
     ui->textEdit->setText(getPath(folder));
-    // clean the UI
     ui->PrincipalWidget->clear();
 
-    // LCRS logic
-    Node* child = folder->left;
-    while (child) {
+    for (Node* child : folder->children) {
         QTreeWidgetItem* item = new QTreeWidgetItem(ui->PrincipalWidget);
         item->setText(0, QString::fromStdString(child->name));
-
-        // save the pointer just to know what file it is [without chatgpt my bro]
         item->setData(0, Qt::UserRole, QVariant::fromValue((void*)child));
 
-        // icons
         if (child->isFolder) {
             item->setIcon(0, style()->standardIcon(QStyle::SP_DirIcon));
         } else {
             item->setIcon(0, style()->standardIcon(QStyle::SP_FileIcon));
         }
-
-        child = child->right;
     }
 }
 
@@ -207,48 +237,90 @@ bool MainWindow::eventFilter(QObject *obj, QEvent *event) {
     return QMainWindow::eventFilter(obj, event);
 }
 
+bool MainWindow::isAncestor(Node* potentialAncestor, Node* target) {
+    Node* temp = target;
+    while (temp) {
+        if (temp == potentialAncestor) return true;
+        temp = temp->parent;
+    }
+    return false;
+}
+
 void MainWindow::pasteLogic(Node* destination) {
     if (!nodeToCopy || !destination) return;
 
+    if (isAncestor(nodeToCopy, destination)) {
+        QMessageBox::warning(this, "Error", "You can't paste a file in the same file!");
+        return;
+    }
     string inputName = nodeToCopy->name;
     string baseName, extension = "";
-
     if (!nodeToCopy->isFolder) {
         size_t lastDot = inputName.find_last_of(".");
         if (lastDot != string::npos) {
             baseName = inputName.substr(0, lastDot);
             extension = inputName.substr(lastDot);
-        } else {
-            baseName = inputName;
+        } else { baseName = inputName; }
+    } else { baseName = inputName; }
+
+    string finalName = baseName;
+    if (manager.findChild(destination, finalName + extension) != nullptr) {
+        int counter = 1;
+        while (manager.findChild(destination, baseName + " copy " + std::to_string(counter) + extension) != nullptr) {
+            counter++;
         }
-    } else {
-        baseName = inputName;
+        finalName = baseName + " copy " + std::to_string(counter);
     }
+    finalName += extension;
 
-    // just if is pasted in the same folder
-    string finalName = baseName + extension;
-    int counter = 1;
-    while (manager.findChild(destination, finalName) != nullptr) {
-        finalName = baseName + " copy " + std::to_string(counter++) + extension;
-    }
-
-    // create clone
-    Node* pastedNode = new Node(finalName, nodeToCopy->isFolder, destination);
-    pastedNode->content = nodeToCopy->content;
-    pastedNode->left = manager.copyNode(nodeToCopy->left, pastedNode);
-
-    // insert in the LCRS
-    if (!destination->left) {
-        destination->left = pastedNode;
-    } else {
-        Node* tmp = destination->left;
-        while (tmp->right) tmp = tmp->right;
-        tmp->right = pastedNode;
-    }
+    // used copyNode to adapt to vector
+    Node* pastedNode = manager.copyNode(nodeToCopy, destination);
+    pastedNode->name = finalName;
 
     manager.saveBinary("System777.bin");
     loadFolder(currentFolder, false);
     this->statusBar()->showMessage("Pasted: " + QString::fromStdString(finalName), 2000);
+}
+
+void MainWindow::copyAction() {
+    QTreeWidgetItem* item = ui->PrincipalWidget->currentItem();
+    if (!item) return;
+
+    Node* selectedNode = (Node*)item->data(0, Qt::UserRole).value<void*>();
+
+    if (selectedNode) {
+        nodeToCopy = selectedNode;
+        this->statusBar()->showMessage("Copied: " + QString::fromStdString(nodeToCopy->name), 2000);
+    }
+}
+
+void MainWindow::updateFavoritesUI() {
+    favoritesModel->clear(); // clean the model
+
+    for (Node* node : favoriteNodes) {
+        QStandardItem* item = new QStandardItem(QString::fromStdString(node->name));
+
+        // save the pointer when its clicked
+        item->setData(QVariant::fromValue((void*)node), Qt::UserRole);
+
+        if (node->isFolder) {
+            item->setIcon(style()->standardIcon(QStyle::SP_DirIcon));
+        } else {
+            item->setIcon(style()->standardIcon(QStyle::SP_FileIcon));
+        }
+
+        favoritesModel->appendRow(item);
+    }
+}
+
+void MainWindow::collectFavorites(Node* node) {
+    if (!node) return;
+    if (node->isFavorite) {
+        favoriteNodes.append(node);
+    }
+    for (Node* child : node->children) {
+        collectFavorites(child);
+    }
 }
 
 void MainWindow::on_PrincipalWidget_customContextMenuRequested(const QPoint &pos)
@@ -276,10 +348,8 @@ void MainWindow::on_PrincipalWidget_customContextMenuRequested(const QPoint &pos
 
         // copy
         QAction* copyAct = menu.addAction("Copy");
-        connect(copyAct, &QAction::triggered, this, [=]() {
-            nodeToCopy = selectedNode;
-            this->statusBar()->showMessage("Copied: " + QString::fromStdString(nodeToCopy->name), 2000);
-        });
+        copyAct->setShortcut(QKeySequence::Copy);
+        connect(copyAct, &QAction::triggered, this, &MainWindow::copyAction);
 
         // paste inside something blah blah
         if (nodeToCopy && selectedNode->isFolder) {
@@ -318,6 +388,17 @@ void MainWindow::on_PrincipalWidget_customContextMenuRequested(const QPoint &pos
                 manager.deleteNode(selectedNode);
                 manager.saveBinary("System777.bin");
                 loadFolder(currentFolder, false);
+            }
+        });
+
+        menu.addSeparator();
+        QAction* favAct = menu.addAction("Add to Favorites");
+        connect(favAct, &QAction::triggered, this, [=]() {
+            if (!selectedNode->isFavorite) {
+                selectedNode->isFavorite = true; // <--- MARCAMOS EL NODO
+                favoriteNodes.append(selectedNode);
+                updateFavoritesUI();
+                manager.saveBinary("System777.bin"); // <--- GUARDAMOS EL BINARIO
             }
         });
 
@@ -380,5 +461,26 @@ void MainWindow::on_PrincipalWidget_customContextMenuRequested(const QPoint &pos
         });
     }
     menu.exec(QCursor::pos());
+}
+
+void MainWindow::on_favoritesTreeView_customContextMenuRequested(const QPoint &pos) {
+    QModelIndex index = ui->favoritesTreeView->indexAt(pos);
+    if (!index.isValid()) return;
+
+    Node* selectedNode = (Node*)index.data(Qt::UserRole).value<void*>();
+    if (!selectedNode) return;
+
+    QMenu menu(this);
+    QAction* removeAct = menu.addAction("Remove from Favorites");
+
+    connect(removeAct, &QAction::triggered, this, [=]() {
+        selectedNode->isFavorite = false; // remove the mark
+        favoriteNodes.removeAll(selectedNode); // bye of temporal list
+        updateFavoritesUI();
+        manager.saveBinary("System777.bin");
+        this->statusBar()->showMessage("Removed from favorites", 2000);
+    });
+
+    menu.exec(ui->favoritesTreeView->viewport()->mapToGlobal(pos));
 }
 

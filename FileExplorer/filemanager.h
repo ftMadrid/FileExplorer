@@ -3,17 +3,16 @@
 
 #include "node.h"
 #include <fstream>
-#include <iostream>
+#include <string>
 
+using std::string;
 using std::ofstream;
 using std::ifstream;
-using std::string;
 
 class FileManager {
 private:
-    Node* loadTree(std::ifstream& in, Node* parentNode);
-    void saveTree(Node* node, std::ofstream& out);
-    void deleteTree(Node* node);
+    Node* loadTree(ifstream& in, Node* parentNode);
+    void saveTree(Node* node, ofstream& out);
 
 public:
     Node* root;
@@ -21,13 +20,14 @@ public:
     FileManager();
     ~FileManager();
 
+    void loadBinary(string filename);
+    void saveBinary(string filename);
+    void renameNode(Node* target, string newName);
+
     void addNode(Node* parent, string name, bool isFolder);
     void deleteNode(Node* target);
-    void renameNode(Node* target, string newName);
-    void saveBinary(string filename);
-    void loadBinary(string filename);
-    Node* searchNode(Node* current, string name);
     Node* findChild(Node* parent, string name);
+    Node* searchNode(Node* current, string name);
     Node* copyNode(Node* source, Node* newParent);
 };
 
