@@ -13,6 +13,8 @@ Notepad::Notepad(Node* targetNode, FileManager* manager, QWidget *parent)
     this->setFixedSize(800, 600);
     ui->plainTextEdit->setContextMenuPolicy(Qt::CustomContextMenu);
 
+    this->addAction(ui->actionSave_File);
+
     if (currentNode) {
         this->setWindowTitle("Editing: " + QString::fromStdString(currentNode->name));
         loadNodeContent();
@@ -32,26 +34,28 @@ void Notepad::loadNodeContent() {
 void Notepad::on_actionSave_File_triggered() {
     if (!currentNode) return;
 
-    // update the nodes content in memory
     currentNode->content = ui->plainTextEdit->toPlainText().toStdString();
+    time_t now = std::time(nullptr);
+    currentNode->modificationDate = now;
 
-    // save the whole tree to the binary file for persistence
+    if (currentNode->parent) {
+        currentNode->parent->modificationDate = now;
+    }
+
     fileManager->saveBinary("System777.bin");
-
-    this->statusBar()->showMessage("File saved!", 3000);
-}
-
-void Notepad::handleClose() {
-    this->close();
+    this->statusBar()->showMessage("File saved.", 3000);
 }
 
 void Notepad::on_plainTextEdit_customContextMenuRequested(const QPoint &pos) {
     QMenu menu(this);
     menu.addAction(ui->actionSave_File);
-    menu.addSeparator();
 
     menu.addAction("Close Notepad", this, &Notepad::handleClose);
 
     menu.exec(ui->plainTextEdit->mapToGlobal(pos));
+}
+
+void Notepad::handleClose() {
+    this->close();
 }
 

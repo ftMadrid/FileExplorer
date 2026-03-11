@@ -42,9 +42,13 @@ private:
     void pasteLogic(Node* destination);
     void copyAction();
     QStandardItemModel *favoritesModel;
+    QStandardItemModel *metaDataModel;
     QList<Node*> favoriteNodes;
     void updateFavoritesUI();
     void collectFavorites(Node* node);
+    void updateMetadata(Node* node);
+    long calculateTotalSize(Node* node);
+    QString formatSize(long bytes);
 
 protected:
     // func just to deselected an item when we clicked in another place

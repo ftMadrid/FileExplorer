@@ -2,6 +2,10 @@
 
 FileManager::FileManager() {
     root = new Node("C:/", true);
+
+    if (!findChild(root, ".trash")) {
+        addNode(root, ".trash", true);
+    }
 }
 
 FileManager::~FileManager() {
@@ -66,6 +70,9 @@ void FileManager::saveTree(Node* node, ofstream& out) {
     char favFlag = node->isFavorite ? 1 : 0;
     out.write(&favFlag, sizeof(char));
 
+    out.write((char*)&node->creationDate, sizeof(std::time_t));
+    out.write((char*)&node->modificationDate, sizeof(std::time_t));
+
     // save the amount of childs
     int childCount = (int)node->children.size();
     out.write((char*)&childCount, sizeof(int));
@@ -115,6 +122,9 @@ Node* FileManager::loadTree(ifstream& in, Node* parentNode) {
     char favFlag;
     in.read(&favFlag, sizeof(char));
     newNode->isFavorite = (favFlag == 1); // load the state
+
+    in.read((char*)&newNode->creationDate, sizeof(std::time_t));
+    in.read((char*)&newNode->modificationDate, sizeof(std::time_t));
 
     // read amount of childs
     int childCount = 0;

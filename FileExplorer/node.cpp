@@ -6,6 +6,8 @@ Node::Node(string name, bool isFolder, Node* parent) {
     this->content = "";
     this->isFavorite = false;
     this->parent = parent;
+    this->creationDate = std::time(nullptr);
+    this->modificationDate = std::time(nullptr);
 }
 
 Node::~Node() {
