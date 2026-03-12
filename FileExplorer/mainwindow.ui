@@ -118,10 +118,7 @@ li.checked::marker { content: &quot;\2612&quot;; }
          <cursorShape>PointingHandCursor</cursorShape>
         </property>
         <property name="text">
-         <string/>
-        </property>
-        <property name="icon">
-         <iconset theme="QIcon::ThemeIcon::EditFind"/>
+         <string>🔍</string>
         </property>
        </widget>
       </item>

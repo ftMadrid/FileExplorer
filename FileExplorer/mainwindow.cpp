@@ -44,7 +44,7 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent) , ui(new Ui::MainW
     collectFavorites(manager.root);
     updateFavoritesUI();
 
-    qDebug() << "The data bin is at: " << QDir::currentPath();
+    qDebug() << "[INIT LOG] Data bin at: " << QDir::currentPath();
 
     // double click
     connect(ui->PrincipalWidget, &QTreeWidget::itemDoubleClicked, this, [=](QTreeWidgetItem* item) {
@@ -473,7 +473,8 @@ void MainWindow::on_PrincipalWidget_customContextMenuRequested(const QPoint &pos
         if (currentItem) {
             Node* selectedNode = (Node*)currentItem->data(0, Qt::UserRole).value<void*>();
 
-            QAction* restoreAct = menu.addAction("Restore");
+            QAction* restoreAct = menu.addAction("♻️ Restore");
+            restoreAct->setIcon(QIcon::fromTheme(QIcon::ThemeIcon::SystemReboot));
             connect(restoreAct, &QAction::triggered, this, [=]() {
                 if (selectedNode->originalParent) {
                     // out of the recycle bin
@@ -488,7 +489,7 @@ void MainWindow::on_PrincipalWidget_customContextMenuRequested(const QPoint &pos
                 }
             });
 
-            QAction* deletePermAct = menu.addAction("Delete Permanently...");
+            QAction* deletePermAct = menu.addAction("❌ Delete Permanently");
             connect(deletePermAct, &QAction::triggered, this, [=]() {
                 if (QMessageBox::question(this, "Permanent Delete", "This cannot be undone. Delete?") == QMessageBox::Yes) {
                     manager.deleteNode(selectedNode);
@@ -498,7 +499,7 @@ void MainWindow::on_PrincipalWidget_customContextMenuRequested(const QPoint &pos
             });
         } else {
             // click funcs
-            QAction* restoreAllAct = menu.addAction("Restore All");
+            QAction* restoreAllAct = menu.addAction("♻️ Restore All");
             connect(restoreAllAct, &QAction::triggered, this, [=]() {
                 while (!trash->children.empty()) {
                     Node* n = trash->children[0];
@@ -512,7 +513,7 @@ void MainWindow::on_PrincipalWidget_customContextMenuRequested(const QPoint &pos
                 loadFolder(trash);
             });
 
-            QAction* emptyTrashAct = menu.addAction("Empty Trash");
+            QAction* emptyTrashAct = menu.addAction("❌ Empty Trash");
             connect(emptyTrashAct, &QAction::triggered, this, [=]() {
                 if (QMessageBox::warning(this, "Empty Trash", "Delete all items?", QMessageBox::Yes | QMessageBox::No) == QMessageBox::Yes) {
                     while (!trash->children.empty()) {
@@ -530,9 +531,11 @@ void MainWindow::on_PrincipalWidget_customContextMenuRequested(const QPoint &pos
             if (selectedNode->isFolder) {
                 targetFolder = selectedNode;
                 QAction* openAct = menu.addAction("Open Folder");
+                openAct->setIcon(this->style()->standardIcon(QStyle::SP_DirOpenIcon));
+                openAct->setIconVisibleInMenu(true);
                 connect(openAct, &QAction::triggered, this, [=]() { loadFolder(selectedNode); });
             } else {
-                QAction* openNotepad = menu.addAction("Open with Notepad");
+                QAction* openNotepad = menu.addAction("📝 Open with Notepad");
                 connect(openNotepad, &QAction::triggered, this, [=]() {
                     Notepad *notepad = new Notepad(selectedNode, &manager);
                     notepad->setAttribute(Qt::WA_DeleteOnClose);
@@ -542,19 +545,19 @@ void MainWindow::on_PrincipalWidget_customContextMenuRequested(const QPoint &pos
             menu.addSeparator();
 
             // copy
-            QAction* copyAct = menu.addAction("Copy");
+            QAction* copyAct = menu.addAction("📑 Copy");
             copyAct->setShortcut(QKeySequence::Copy);
             connect(copyAct, &QAction::triggered, this, &MainWindow::copyAction);
 
             // paste inside something blah blah
             if (nodeToCopy && selectedNode->isFolder) {
-                QAction* pasteInAct = menu.addAction("Paste inside '" + QString::fromStdString(selectedNode->name) + "'");
+                QAction* pasteInAct = menu.addAction("📋 Paste inside '" + QString::fromStdString(selectedNode->name) + "'");
                 connect(pasteInAct, &QAction::triggered, this, [=]() { pasteLogic(selectedNode); });
             }
             menu.addSeparator();
 
             // rename
-            QAction* renameAct = menu.addAction("Rename");
+            QAction* renameAct = menu.addAction("✏️ Rename");
             connect(renameAct, &QAction::triggered, this, [=]() {
                 bool ok;
                 std::string nameToEdit = selectedNode->name;
@@ -594,7 +597,7 @@ void MainWindow::on_PrincipalWidget_customContextMenuRequested(const QPoint &pos
             });
 
             // delete
-            QAction* deleteAct = menu.addAction("Delete");
+            QAction* deleteAct = menu.addAction("🗑️ Delete");
             connect(deleteAct, &QAction::triggered, this, [=]() {
                 Node* trash = manager.findChild(manager.root, ".trash");
                 if (!selectedNode || selectedNode == manager.root || selectedNode == trash) return;
@@ -623,7 +626,7 @@ void MainWindow::on_PrincipalWidget_customContextMenuRequested(const QPoint &pos
             });
 
             menu.addSeparator();
-            QAction* favAct = menu.addAction("Add to Favorites");
+            QAction* favAct = menu.addAction("🎖️ Add to Favorites");
             connect(favAct, &QAction::triggered, this, [=]() {
                 if (!selectedNode->isFavorite) {
                     selectedNode->isFavorite = true; // mark the node
@@ -636,13 +639,15 @@ void MainWindow::on_PrincipalWidget_customContextMenuRequested(const QPoint &pos
         } else {
             // click in a blank space
             if (nodeToCopy) {
-                QAction* pasteHereAct = menu.addAction("Paste Here");
+                QAction* pasteHereAct = menu.addAction("📋 Paste Here");
                 connect(pasteHereAct, &QAction::triggered, this, [=]() { pasteLogic(currentFolder); });
                 menu.addSeparator();
             }
 
             // create file
             QAction* createFile = menu.addAction("Create New File");
+            createFile->setIcon(this->style()->standardIcon(QStyle::SP_FileIcon));
+            createFile->setIconVisibleInMenu(true);
             connect(createFile, &QAction::triggered, this, [=]() {
                 bool ok;
                 QString name = QInputDialog::getText(this, "New File", "Name:", QLineEdit::Normal, "", &ok);
@@ -674,6 +679,8 @@ void MainWindow::on_PrincipalWidget_customContextMenuRequested(const QPoint &pos
 
             // create folder
             QAction* createDir = menu.addAction("Create New Folder");
+            createDir->setIcon(this->style()->standardIcon(QStyle::SP_DirIcon));
+            createDir->setIconVisibleInMenu(true);
             connect(createDir, &QAction::triggered, this, [=]() {
                 bool ok;
                 QString name = QInputDialog::getText(this, "New Folder", "Name:", QLineEdit::Normal, "", &ok);
@@ -707,7 +714,7 @@ void MainWindow::on_favoritesTreeView_customContextMenuRequested(const QPoint &p
     if (index.data(Qt::UserRole + 1).toBool()) return;
 
     QMenu menu(this);
-    QAction* removeAct = menu.addAction("Remove from Favorites");
+    QAction* removeAct = menu.addAction("❌ Remove from Favorites");
 
     connect(removeAct, &QAction::triggered, this, [=]() {
         selectedNode->isFavorite = false; // remove the mark

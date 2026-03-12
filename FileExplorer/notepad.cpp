@@ -50,7 +50,7 @@ void Notepad::on_plainTextEdit_customContextMenuRequested(const QPoint &pos) {
     QMenu menu(this);
     menu.addAction(ui->actionSave_File);
 
-    menu.addAction("Close Notepad", this, &Notepad::handleClose);
+    menu.addAction("❌ Close Notepad", this, &Notepad::handleClose);
 
     menu.exec(ui->plainTextEdit->mapToGlobal(pos));
 }
