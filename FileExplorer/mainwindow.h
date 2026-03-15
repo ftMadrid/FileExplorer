@@ -49,6 +49,9 @@ private:
     void updateMetadata(Node* node);
     long calculateTotalSize(Node* node);
     QString formatSize(long bytes);
+    bool isCutOperation = false;
+    void cutAction();
+    void applyRestoreLogic(Node* nodeToRestore);
 
 protected:
     // func just to deselected an item when we clicked in another place

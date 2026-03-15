@@ -297,40 +297,91 @@ void MainWindow::pasteLogic(Node* destination) {
     if (!nodeToCopy || !destination) return;
 
     if (isAncestor(nodeToCopy, destination)) {
-        QMessageBox::warning(this, "Error", "You can't paste a file in the same file!");
+        QMessageBox::warning(this, "Error", "You cannot move or copy a folder within itself.");
         return;
     }
-    string inputName = nodeToCopy->name;
-    string baseName, extension = "";
-    if (!nodeToCopy->isFolder) {
-        size_t lastDot = inputName.find_last_of(".");
-        if (lastDot != string::npos) {
-            baseName = inputName.substr(0, lastDot);
-            extension = inputName.substr(lastDot);
-        } else { baseName = inputName; }
-    } else { baseName = inputName; }
 
-    string finalName = baseName;
-    if (manager.findChild(destination, finalName + extension) != nullptr) {
-        int counter = 1;
-        while (manager.findChild(destination, baseName + " copy " + std::to_string(counter) + extension) != nullptr) {
-            counter++;
+    string finalName;
+
+    if (isCutOperation) {
+
+        finalName = nodeToCopy->name;
+
+        if (manager.findChild(destination, finalName) != nullptr) {
+            int counter = 1;
+            string base = finalName;
+            string ext = "";
+            if (!nodeToCopy->isFolder) {
+                size_t dot = finalName.find_last_of(".");
+                if (dot != string::npos) {
+                    base = finalName.substr(0, dot);
+                    ext = finalName.substr(dot);
+                }
+            }
+            while (manager.findChild(destination, base + " (moved) " + std::to_string(counter) + ext) != nullptr) {
+                counter++;
+            }
+            finalName = base + " (moved) " + std::to_string(counter) + ext;
         }
-        finalName = baseName + " copy " + std::to_string(counter);
+
+        // unlink actual father
+        if (nodeToCopy->parent) {
+            auto& v = nodeToCopy->parent->children;
+            v.erase(std::remove(v.begin(), v.end(), nodeToCopy), v.end());
+            nodeToCopy->parent->modificationDate = std::time(nullptr);
+        }
+
+        // update the new father
+        nodeToCopy->parent = destination;
+        nodeToCopy->name = finalName;
+        destination->children.push_back(nodeToCopy);
+        destination->modificationDate = std::time(nullptr);
+        nodeToCopy->modificationDate = std::time(nullptr);
+
+        this->statusBar()->showMessage("Moved: " + QString::fromStdString(finalName), 2000);
+
+        // clean cut state
+        nodeToCopy = nullptr;
+        isCutOperation = false;
+
+    } else {
+        // copy logic
+
+        string inputName = nodeToCopy->name;
+        string baseName = inputName;
+        string extension = "";
+
+        if (!nodeToCopy->isFolder) {
+            size_t lastDot = inputName.find_last_of(".");
+            if (lastDot != string::npos) {
+                baseName = inputName.substr(0, lastDot);
+                extension = inputName.substr(lastDot);
+            }
+        }
+
+        finalName = inputName;
+        if (manager.findChild(destination, finalName + extension) != nullptr) {
+            int counter = 1;
+            while (manager.findChild(destination, baseName + " copy " + std::to_string(counter) + extension) != nullptr) {
+                counter++;
+            }
+            finalName = baseName + " copy " + std::to_string(counter) + extension;
+        } else {
+            // make sure there is not duplicates
+            finalName = inputName;
+        }
+
+        Node* pastedNode = manager.copyNode(nodeToCopy, destination);
+        pastedNode->name = finalName;
+        pastedNode->creationDate = std::time(nullptr);
+        pastedNode->modificationDate = std::time(nullptr);
+        destination->modificationDate = std::time(nullptr);
+
+        this->statusBar()->showMessage("Pasted: " + QString::fromStdString(finalName), 2000);
     }
-    finalName += extension;
-
-    // used copyNode to adapt to vector
-    Node* pastedNode = manager.copyNode(nodeToCopy, destination);
-    destination->modificationDate = std::time(nullptr);
-    pastedNode->name = finalName;
-
-    pastedNode->creationDate = std::time(nullptr);
-    pastedNode->modificationDate = std::time(nullptr);
 
     manager.saveBinary("System777.bin");
     loadFolder(currentFolder, false);
-    this->statusBar()->showMessage("Pasted: " + QString::fromStdString(finalName), 2000);
 }
 
 void MainWindow::copyAction() {
@@ -459,6 +510,59 @@ QString MainWindow::formatSize(long bytes) {
     return QString::number(size, 'f', 1) + " " + units[unitIndex];
 }
 
+void MainWindow::cutAction() {
+    QTreeWidgetItem* item = ui->PrincipalWidget->currentItem();
+    if (!item) return;
+
+    Node* selectedNode = (Node*)item->data(0, Qt::UserRole).value<void*>();
+
+    if (selectedNode) {
+        nodeToCopy = selectedNode;
+        isCutOperation = true;
+        this->statusBar()->showMessage("Cut: " + QString::fromStdString(nodeToCopy->name), 2000);
+    }
+}
+
+void MainWindow::applyRestoreLogic(Node* nodeToRestore) {
+    if (!nodeToRestore || !nodeToRestore->originalParent) return;
+
+    Node* trash = manager.findChild(manager.root, ".trash");
+    Node* dest = nodeToRestore->originalParent;
+    string finalName = nodeToRestore->name;
+
+    // anti-duplicates yeah
+    if (manager.findChild(dest, finalName) != nullptr) {
+        string base = finalName;
+        string ext = "";
+        if (!nodeToRestore->isFolder) {
+            size_t dot = finalName.find_last_of(".");
+            if (dot != string::npos) {
+                base = finalName.substr(0, dot);
+                ext = finalName.substr(dot);
+            }
+        }
+
+        int counter = 1;
+        while (manager.findChild(dest, base + " copy " + std::to_string(counter) + ext) != nullptr) {
+            counter++;
+        }
+        finalName = base + " copy " + std::to_string(counter) + ext;
+    }
+
+    // move and update
+    nodeToRestore->name = finalName;
+    // bye bye on recycle bin
+    trash->children.erase(std::remove(trash->children.begin(), trash->children.end(), nodeToRestore), trash->children.end());
+
+    // back to original father
+    nodeToRestore->parent = dest;
+    dest->children.push_back(nodeToRestore);
+
+    // update dates
+    nodeToRestore->modificationDate = std::time(nullptr);
+    dest->modificationDate = std::time(nullptr);
+}
+
 void MainWindow::on_PrincipalWidget_customContextMenuRequested(const QPoint &pos)
 {
     QTreeWidgetItem* currentItem = ui->PrincipalWidget->itemAt(pos);
@@ -476,19 +580,11 @@ void MainWindow::on_PrincipalWidget_customContextMenuRequested(const QPoint &pos
             QAction* restoreAct = menu.addAction("♻️ Restore");
             restoreAct->setIcon(QIcon::fromTheme(QIcon::ThemeIcon::SystemReboot));
             connect(restoreAct, &QAction::triggered, this, [=]() {
-                if (selectedNode->originalParent) {
-                    // out of the recycle bin
-                    trash->children.erase(std::remove(trash->children.begin(), trash->children.end(), selectedNode), trash->children.end());
-
-                    // get into her original father
-                    selectedNode->parent = selectedNode->originalParent;
-                    selectedNode->parent->children.push_back(selectedNode);
-
-                    manager.saveBinary("System777.bin");
-                    loadFolder(trash); // refresh recycle bin!!!!!!!!!!
-                }
+                applyRestoreLogic(selectedNode);
+                manager.saveBinary("System777.bin");
+                loadFolder(trash);
+                this->statusBar()->showMessage("Restored: " + QString::fromStdString(selectedNode->name), 2000);
             });
-
             QAction* deletePermAct = menu.addAction("❌ Delete Permanently");
             connect(deletePermAct, &QAction::triggered, this, [=]() {
                 if (QMessageBox::question(this, "Permanent Delete", "This cannot be undone. Delete?") == QMessageBox::Yes) {
@@ -502,15 +598,12 @@ void MainWindow::on_PrincipalWidget_customContextMenuRequested(const QPoint &pos
             QAction* restoreAllAct = menu.addAction("♻️ Restore All");
             connect(restoreAllAct, &QAction::triggered, this, [=]() {
                 while (!trash->children.empty()) {
-                    Node* n = trash->children[0];
-                    if (n->originalParent) {
-                        n->parent = n->originalParent;
-                        n->originalParent->children.push_back(n);
-                    }
-                    trash->children.erase(trash->children.begin());
+                    applyRestoreLogic(trash->children[0]);
                 }
+
                 manager.saveBinary("System777.bin");
                 loadFolder(trash);
+                this->statusBar()->showMessage("All items restored successfully", 2000);
             });
 
             QAction* emptyTrashAct = menu.addAction("❌ Empty Trash");
@@ -544,6 +637,11 @@ void MainWindow::on_PrincipalWidget_customContextMenuRequested(const QPoint &pos
             }
             menu.addSeparator();
 
+            // cut
+            QAction* cutAct = menu.addAction("✂️ Cut");
+            cutAct->setShortcut(QKeySequence::Cut);
+            connect(cutAct, &QAction::triggered, this, &MainWindow::cutAction);
+
             // copy
             QAction* copyAct = menu.addAction("📑 Copy");
             copyAct->setShortcut(QKeySequence::Copy);
@@ -576,12 +674,12 @@ void MainWindow::on_PrincipalWidget_customContextMenuRequested(const QPoint &pos
                 if (ok && !inputName.isEmpty()) {
                     std::string newName = inputName.toStdString();
 
-                    // if is file we return with the .txt
-                    if (!selectedNode->isFolder) {
+                    // force the .txt extension
+                    if (newName.length() < 4 || newName.substr(newName.length() - 4) != ".txt") {
                         newName += ".txt";
                     }
 
-                    // verify for duplicates
+                    // check duplicates
                     Node* duplicate = manager.findChild(currentFolder, newName);
                     if (duplicate != nullptr && duplicate != selectedNode) {
                         QMessageBox::warning(this, "Error", "There is already a file with this name!");
@@ -652,20 +750,19 @@ void MainWindow::on_PrincipalWidget_customContextMenuRequested(const QPoint &pos
                 bool ok;
                 QString name = QInputDialog::getText(this, "New File", "Name:", QLineEdit::Normal, "", &ok);
                 if (ok && !name.isEmpty()) {
-                    string inputName = name.toStdString();
-                    string baseName, extension = ".txt";
+                    string finalName = name.toStdString();
 
-                    size_t lastDot = inputName.find_last_of(".");
-                    if (lastDot != string::npos) {
-                        baseName = inputName.substr(0, lastDot);
-                        extension = inputName.substr(lastDot);
-                    } else {
-                        baseName = inputName;
+                    // force the .txt extension
+                    if (finalName.length() < 4 || finalName.substr(finalName.length() - 4) != ".txt") {
+                        finalName += ".txt";
                     }
 
-                    string finalName = baseName + extension;
+                    // save the basename for the coynter of duplicates (removing the .txt temp)
+                    string baseName = finalName.substr(0, finalName.length() - 4);
+                    string extension = ".txt";
+
                     int counter = 1;
-                    // method when created a file with a existant name
+                    // duplicates logic
                     while (manager.findChild(currentFolder, finalName) != nullptr) {
                         finalName = baseName + " " + std::to_string(counter++) + extension;
                     }
