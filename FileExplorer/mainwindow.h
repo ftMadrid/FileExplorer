@@ -21,7 +21,7 @@ public:
     ~MainWindow();
 
 private slots:
-    void on_PrincipalWidget_customContextMenuRequested(const QPoint &pos);
+    void PrincipalWidget_customContextMenuRequested(const QPoint &pos);
     void on_favoritesTreeView_customContextMenuRequested(const QPoint &pos);
     void on_backButton_clicked();
     void on_nextButton_clicked();
@@ -52,6 +52,8 @@ private:
     bool isCutOperation = false;
     void cutAction();
     void applyRestoreLogic(Node* nodeToRestore);
+    void moveNodeLogic(Node* source, Node* destination);
+    string nameAtCopyTime;
 
 protected:
     // func just to deselected an item when we clicked in another place

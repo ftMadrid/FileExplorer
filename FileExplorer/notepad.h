@@ -13,6 +13,9 @@ class Notepad : public QMainWindow
 {
     Q_OBJECT
 
+signals:
+    void fileSaved(Node* node);
+
 public:
     explicit Notepad(Node* targetNode, FileManager* manager, QWidget *parent = nullptr);
     ~Notepad();

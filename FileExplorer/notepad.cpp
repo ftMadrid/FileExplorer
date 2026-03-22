@@ -43,6 +43,7 @@ void Notepad::on_actionSave_File_triggered() {
     }
 
     fileManager->saveBinary("System777.bin");
+    emit fileSaved(currentNode);
     this->statusBar()->showMessage("File saved.", 3000);
 }
 

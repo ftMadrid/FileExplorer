@@ -1,6 +1,7 @@
 #include "filemanager.h"
 
 FileManager::FileManager() {
+    isIconMode = false;
     root = new Node("C:/", true);
 
     if (!findChild(root, ".trash")) {
@@ -43,11 +44,14 @@ void FileManager::deleteNode(Node* target) {
 // --- persistent ---
 
 void FileManager::saveBinary(string filename) {
-    ofstream out(filename, std::ios::binary);
-    if (out.is_open()) {
-        saveTree(root, out);
-        out.close();
-    }
+    std::ofstream out(filename, std::ios::binary);
+    if (!out) return;
+
+    out.write(reinterpret_cast<const char*>(&isIconMode), sizeof(isIconMode));
+
+    saveTree(root, out);
+
+    out.close();
 }
 
 void FileManager::saveTree(Node* node, ofstream& out) {
@@ -83,15 +87,19 @@ void FileManager::saveTree(Node* node, ofstream& out) {
 }
 
 void FileManager::loadBinary(string filename) {
-    ifstream in(filename, std::ios::binary);
-    if (in.is_open()) {
-        Node* tempRoot = loadTree(in, nullptr);
-        if (tempRoot) {
-            delete root;
-            root = tempRoot;
-        }
-        in.close();
+    std::ifstream in(filename, std::ios::binary);
+    if (!in) return; // if there isnt file we leave in root
+
+    // check the preference view
+    in.read(reinterpret_cast<char*>(&isIconMode), sizeof(isIconMode));
+    Node* newRoot = loadTree(in, nullptr);
+
+    if (newRoot) {
+        if (root) delete root;
+        root = newRoot; // replace by the one who have the data
     }
+
+    in.close();
 }
 
 Node* FileManager::loadTree(ifstream& in, Node* parentNode) {

@@ -29,6 +29,7 @@ public:
     Node* findChild(Node* parent, string name);
     Node* searchNode(Node* current, string name);
     Node* copyNode(Node* source, Node* newParent);
+    bool isIconMode = false;
 };
 
 #endif
