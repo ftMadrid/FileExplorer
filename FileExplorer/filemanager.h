@@ -30,6 +30,7 @@ public:
     Node* searchNode(Node* current, string name);
     Node* copyNode(Node* source, Node* newParent);
     bool isIconMode = false;
+    int iconSize = 64;
 };
 
 #endif

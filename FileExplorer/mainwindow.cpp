@@ -11,6 +11,7 @@
 #include <QDateTime>
 #include <QListWidget>
 #include <QListView>
+#include <QActionGroup>
 #include <algorithm>
 
 MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent) , ui(new Ui::MainWindow) {
@@ -33,6 +34,10 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent) , ui(new Ui::MainW
 
     // load data and events filter
     manager.loadBinary("System777.bin");
+
+    if (manager.iconSize < 16) manager.iconSize = 64;
+    applyIconSize(manager.iconSize);
+
     ui->iconsWidget->viewport()->installEventFilter(this);
     ui->PrincipalWidget->viewport()->installEventFilter(this);
 
@@ -704,6 +709,13 @@ void MainWindow::moveNodeLogic(Node* source, Node* destination) {
     manager.saveBinary("System777.bin");
 }
 
+void MainWindow::applyIconSize(int size) {
+    // for the icon view
+    ui->iconsWidget->setIconSize(QSize(size, size));
+    int treeSize = std::clamp(size / 2, 16, 48);
+    ui->PrincipalWidget->setIconSize(QSize(treeSize, treeSize));
+}
+
 void MainWindow::PrincipalWidget_customContextMenuRequested(const QPoint &pos)
 {
     Node* selectedNode = nullptr;
@@ -908,6 +920,12 @@ void MainWindow::PrincipalWidget_customContextMenuRequested(const QPoint &pos)
             QAction* viewListAct = viewMenu->addAction("📄 List");
             QAction* viewIconsAct = viewMenu->addAction("🖼️ Icons");
 
+            // check who are selected
+            viewListAct->setCheckable(true);
+            viewIconsAct->setCheckable(true);
+            viewListAct->setChecked(!manager.isIconMode);
+            viewIconsAct->setChecked(manager.isIconMode);
+
             connect(viewListAct, &QAction::triggered, this, [=]() {
                 ui->iconsWidget->hide();
                 ui->PrincipalWidget->show();
@@ -923,6 +941,33 @@ void MainWindow::PrincipalWidget_customContextMenuRequested(const QPoint &pos)
                 manager.saveBinary("System777.bin");
                 loadFolder(currentFolder);
             });
+
+            viewMenu->addSeparator();
+
+            // size submenu
+            QMenu* sizeMenu = viewMenu->addMenu("📏 Icon Size");
+            QActionGroup* sizeGroup = new QActionGroup(this);
+
+            auto addSizeOption = [&](QString label, int sizeValue) {
+                QAction* act = sizeMenu->addAction(label);
+                act->setCheckable(true);
+                // if the size is in one we check
+                if (manager.iconSize == sizeValue) act->setChecked(true);
+
+                sizeGroup->addAction(act);
+
+                connect(act, &QAction::triggered, this, [=]() {
+                    manager.iconSize = sizeValue;
+                    applyIconSize(sizeValue);
+                    manager.saveBinary("System777.bin");
+                    // Forzamos un refresco visual para que Qt reajuste el layout
+                    loadFolder(currentFolder, false);
+                });
+            };
+
+            addSizeOption("Small", 32);
+            addSizeOption("Normal", 64);
+            addSizeOption("Big", 128);
 
             menu.addSeparator();
 

@@ -48,9 +48,9 @@ void FileManager::saveBinary(string filename) {
     if (!out) return;
 
     out.write(reinterpret_cast<const char*>(&isIconMode), sizeof(isIconMode));
+    out.write(reinterpret_cast<const char*>(&iconSize), sizeof(iconSize));
 
     saveTree(root, out);
-
     out.close();
 }
 
@@ -92,6 +92,7 @@ void FileManager::loadBinary(string filename) {
 
     // check the preference view
     in.read(reinterpret_cast<char*>(&isIconMode), sizeof(isIconMode));
+    in.read(reinterpret_cast<char*>(&iconSize), sizeof(iconSize));
     Node* newRoot = loadTree(in, nullptr);
 
     if (newRoot) {

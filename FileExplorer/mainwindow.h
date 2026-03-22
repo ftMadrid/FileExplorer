@@ -54,6 +54,7 @@ private:
     void applyRestoreLogic(Node* nodeToRestore);
     void moveNodeLogic(Node* source, Node* destination);
     string nameAtCopyTime;
+    void applyIconSize(int size);
 
 protected:
     // func just to deselected an item when we clicked in another place
