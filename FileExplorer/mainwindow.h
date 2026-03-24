@@ -55,6 +55,8 @@ private:
     void moveNodeLogic(Node* source, Node* destination);
     string nameAtCopyTime;
     void applyIconSize(int size);
+    bool isInTrash(Node* node);
+    void logInfo(QString message);
 
 protected:
     // func just to deselected an item when we clicked in another place

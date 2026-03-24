@@ -13,6 +13,10 @@
 #include <QListView>
 #include <QActionGroup>
 #include <algorithm>
+#include <iostream>
+
+using std::cout;
+using std::endl;
 
 MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent) , ui(new Ui::MainWindow) {
     ui->setupUi(this);
@@ -51,37 +55,45 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent) , ui(new Ui::MainW
 
     // double click (icon view)
     connect(ui->PrincipalWidget, &QTreeWidget::itemDoubleClicked, this, [=](QTreeWidgetItem* item) {
-        Node* node = (Node*)item->data(0, Qt::UserRole).value<void*>();
+        Node* node = reinterpret_cast<Node*>(item->data(0, Qt::UserRole).value<quintptr>());
         if (node && node->isFolder) loadFolder(node);
         else if (node) {
+            logInfo("Opening file: " + getPath(node));
             Notepad *notepad = new Notepad(node, &manager);
+            notepad->setAttribute(Qt::WA_DeleteOnClose);
             connect(notepad, &Notepad::fileSaved, this, &MainWindow::updateMetadata);
             notepad->show();
         }
     });
 
     connect(ui->iconsWidget, &QListWidget::itemDoubleClicked, this, [=](QListWidgetItem* item) {
-        Node* node = (Node*)item->data(Qt::UserRole).value<void*>();
+        Node* node = reinterpret_cast<Node*>(item->data(Qt::UserRole).value<quintptr>());
         if (node && node->isFolder) loadFolder(node);
-        else if (node) { Notepad *notepad = new Notepad(node, &manager); notepad->show(); }
+        else if (node) {
+            logInfo("Opening file: " + getPath(node));
+            Notepad *notepad = new Notepad(node, &manager);
+            notepad->setAttribute(Qt::WA_DeleteOnClose);
+            notepad->show();
+        }
     });
 
     // simple click for metadata
     connect(ui->PrincipalWidget, &QTreeWidget::itemClicked, this, [=](QTreeWidgetItem* item) {
-        updateMetadata((Node*)item->data(0, Qt::UserRole).value<void*>());
+        updateMetadata(reinterpret_cast<Node*>(item->data(0, Qt::UserRole).value<quintptr>()));
     });
     connect(ui->iconsWidget, &QListWidget::itemClicked, this, [=](QListWidgetItem* item) {
-        updateMetadata((Node*)item->data(Qt::UserRole).value<void*>());
+        updateMetadata(reinterpret_cast<Node*>(item->data(Qt::UserRole).value<quintptr>()));
     });
 
     // favorites
     connect(ui->favoritesTreeView, &QTreeView::clicked, this, [=](const QModelIndex &index) {
-        Node* node = (Node*)index.data(Qt::UserRole).value<void*>();
+        Node* node = reinterpret_cast<Node*>(index.data(Qt::UserRole).value<quintptr>());
         if (node) {
             updateMetadata(node);
             if (node->isFolder) loadFolder(node);
             else {
                 Notepad *notepad = new Notepad(node, &manager);
+                notepad->setAttribute(Qt::WA_DeleteOnClose);
                 notepad->show();
                 if (node->parent) loadFolder(node->parent);
             }
@@ -122,7 +134,7 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent) , ui(new Ui::MainW
         // cap the destination node
         Node* destNode = nullptr;
         if (parent.isValid()) {
-            destNode = (Node*)ui->PrincipalWidget->itemFromIndex(parent)->data(0, Qt::UserRole).value<void*>();
+            destNode = reinterpret_cast<Node*>(ui->PrincipalWidget->itemFromIndex(parent)->data(0, Qt::UserRole).value<quintptr>());
         } else {
             destNode = currentFolder;
         }
@@ -165,7 +177,7 @@ void MainWindow::drawTree(Node* node, QTreeWidgetItem* visualParent) {
     }
 
     item->setText(0, QString::fromStdString(node->name));
-    item->setData(0, Qt::UserRole, QVariant::fromValue((void*)node));
+    item->setData(0, Qt::UserRole, reinterpret_cast<quintptr>(node));
 
     if (node->isFolder) {
         item->setIcon(0, style()->standardIcon(QStyle::SP_DirIcon));
@@ -191,6 +203,9 @@ void MainWindow::loadFolder(Node* folder, bool storeInHistory) {
     currentFolder = folder;
     if (storeInHistory) {
         history.addStep(folder);
+        logInfo("Navigated to: " + getPath(folder));
+    } else {
+        logInfo("Refreshed view: " + getPath(folder));
     }
 
     // update the label for path indicator
@@ -217,7 +232,7 @@ void MainWindow::loadFolder(Node* folder, bool storeInHistory) {
 
         QTreeWidgetItem* item = new QTreeWidgetItem(ui->PrincipalWidget);
         item->setText(0, QString::fromStdString(child->name));
-        item->setData(0, Qt::UserRole, QVariant::fromValue((void*)child));
+        item->setData(0, Qt::UserRole, reinterpret_cast<quintptr>(child));
 
         if (child->isFolder) {
             item->setIcon(0, style()->standardIcon(QStyle::SP_DirIcon));
@@ -233,7 +248,7 @@ void MainWindow::loadFolder(Node* folder, bool storeInHistory) {
         // for the icons
         QListWidgetItem* iconItem = new QListWidgetItem(ui->iconsWidget);
         iconItem->setText(QString::fromStdString(child->name));
-        iconItem->setData(Qt::UserRole, QVariant::fromValue((void*)child));
+        iconItem->setData(Qt::UserRole, reinterpret_cast<quintptr>(child));
 
         if (child->isFolder) {
             iconItem->setIcon(style()->standardIcon(QStyle::SP_DirIcon));
@@ -315,6 +330,7 @@ void MainWindow::on_searchButton_clicked() {
     } else {
         // if is .txt we open with notepad
         Notepad *notepad = new Notepad(currentNode, &manager);
+        notepad->setAttribute(Qt::WA_DeleteOnClose);
         notepad->show();
 
         // loaded the folder archive
@@ -353,13 +369,15 @@ bool MainWindow::eventFilter(QObject *obj, QEvent *event) {
             QTreeWidgetItem* targetItem = ui->PrincipalWidget->itemAt(dropEvent->position().toPoint());
 
             if (itemDropped) {
-                Node* sourceNode = (Node*)itemDropped->data(0, Qt::UserRole).value<void*>();
-                // if we drop in an item
-                Node* destNode = targetItem ? (Node*)targetItem->data(0, Qt::UserRole).value<void*>() : currentFolder;
+                Node* sourceNode = reinterpret_cast<Node*>(itemDropped->data(0, Qt::UserRole).value<quintptr>());
+                Node* destNode = targetItem ? reinterpret_cast<Node*>(targetItem->data(0, Qt::UserRole).value<quintptr>()) : currentFolder;
 
                 if (sourceNode && destNode && destNode->isFolder) {
+                    QString name = QString::fromStdString(sourceNode->name);
+                    QString destPath = getPath(destNode);
                     moveNodeLogic(sourceNode, destNode);
                     loadFolder(currentFolder, false);
+                    logInfo("'" + name + "' moved into '" + destPath + "' (Drag & Drop)");
                     return true;
                 }
             }
@@ -374,17 +392,16 @@ bool MainWindow::eventFilter(QObject *obj, QEvent *event) {
             QListWidgetItem* targetItem = ui->iconsWidget->itemAt(dropEvent->position().toPoint());
 
             if (itemDragged) {
-                Node* sourceNode = (Node*)itemDragged->data(Qt::UserRole).value<void*>();
-                Node* destNode = nullptr;
-
-                if (targetItem) {
-                    destNode = (Node*)targetItem->data(Qt::UserRole).value<void*>();
-                }
+                Node* sourceNode = reinterpret_cast<Node*>(itemDragged->data(Qt::UserRole).value<quintptr>());
+                Node* destNode = targetItem ? reinterpret_cast<Node*>(targetItem->data(Qt::UserRole).value<quintptr>()) : currentFolder;
 
                 // only move if the destination is a folder
                 if (sourceNode && destNode && destNode->isFolder) {
+                    QString name = QString::fromStdString(sourceNode->name);
+                    QString destPath = getPath(destNode);
                     moveNodeLogic(sourceNode, destNode);
                     loadFolder(currentFolder, false);
+                    logInfo("'" + name + "' moved into '" + destPath + "' (Drag & Drop)");
                     return true;
                 } else {
                     loadFolder(currentFolder, false);
@@ -418,7 +435,9 @@ void MainWindow::pasteLogic(Node* destination) {
     string finalName = inputName;
 
     if (isCutOperation) {
+        QString oldPath = getPath(nodeToCopy);
         moveNodeLogic(nodeToCopy, destination);
+        logInfo("Paste (CUT): " + oldPath + " -> " + getPath(destination));
         nodeToCopy = nullptr;
         isCutOperation = false;
     } else {
@@ -448,6 +467,7 @@ void MainWindow::pasteLogic(Node* destination) {
 
         // copy in the memory
         Node* pastedNode = manager.copyNode(nodeToCopy, destination);
+        logInfo("Paste (COPY): From " + getPath(nodeToCopy) + " to " + getPath(destination));
         pastedNode->name = finalName;
         pastedNode->creationDate = std::time(nullptr);
         pastedNode->modificationDate = std::time(nullptr);
@@ -465,16 +485,17 @@ void MainWindow::copyAction() {
 
     if (ui->PrincipalWidget->isVisible()) {
         QTreeWidgetItem* item = ui->PrincipalWidget->currentItem();
-        if (item) selectedNode = (Node*)item->data(0, Qt::UserRole).value<void*>();
+        if (item) selectedNode = reinterpret_cast<Node*>(item->data(0, Qt::UserRole).value<quintptr>());
     } else {
         QListWidgetItem* item = ui->iconsWidget->currentItem();
-        if (item) selectedNode = (Node*)item->data(Qt::UserRole).value<void*>();
+        if (item) selectedNode = reinterpret_cast<Node*>(item->data(Qt::UserRole).value<quintptr>());
     }
 
     if (selectedNode) {
         nodeToCopy = selectedNode;
         nameAtCopyTime = selectedNode->name;
         isCutOperation = false;
+        logInfo("Item Copied to Clipboard: " + getPath(nodeToCopy));
         this->statusBar()->showMessage("Copied: " + QString::fromStdString(nodeToCopy->name), 2000);
     }
 }
@@ -484,15 +505,16 @@ void MainWindow::cutAction() {
 
     if (ui->PrincipalWidget->isVisible()) {
         QTreeWidgetItem* item = ui->PrincipalWidget->currentItem();
-        if (item) selectedNode = (Node*)item->data(0, Qt::UserRole).value<void*>();
+        if (item) selectedNode = reinterpret_cast<Node*>(item->data(0, Qt::UserRole).value<quintptr>());
     } else {
         QListWidgetItem* item = ui->iconsWidget->currentItem();
-        if (item) selectedNode = (Node*)item->data(Qt::UserRole).value<void*>();
+        if (item) selectedNode = reinterpret_cast<Node*>(item->data(Qt::UserRole).value<quintptr>());
     }
 
     if (selectedNode) {
         nodeToCopy = selectedNode;
         isCutOperation = true;
+        logInfo("Item Cut to Clipboard: " + getPath(nodeToCopy));
         this->statusBar()->showMessage("Cut: " + QString::fromStdString(nodeToCopy->name), 2000);
     }
 }
@@ -503,7 +525,7 @@ void MainWindow::updateFavoritesUI() {
     Node* trashNode = manager.findChild(manager.root, ".trash");
     if (trashNode) {
         QStandardItem* trashItem = new QStandardItem("Recycle Bin");
-        trashItem->setData(QVariant::fromValue((void*)trashNode), Qt::UserRole);
+        trashItem->setData(reinterpret_cast<quintptr>(trashNode), Qt::UserRole);
         trashItem->setIcon(style()->standardIcon(QStyle::SP_TrashIcon));
         // save a flag that makes to didnt delete the recycle bin
         trashItem->setData(true, Qt::UserRole + 1);
@@ -519,7 +541,7 @@ void MainWindow::updateFavoritesUI() {
     // insert favorites
     for (Node* node : favoriteNodes) {
         QStandardItem* item = new QStandardItem(QString::fromStdString(node->name));
-        item->setData(QVariant::fromValue((void*)node), Qt::UserRole);
+        item->setData(reinterpret_cast<quintptr>(node), Qt::UserRole);
 
         if (node->isFolder) {
             item->setIcon(style()->standardIcon(QStyle::SP_DirIcon));
@@ -612,16 +634,29 @@ QString MainWindow::formatSize(long bytes) {
 }
 
 void MainWindow::applyRestoreLogic(Node* nodeToRestore) {
-    if (!nodeToRestore || !nodeToRestore->originalParent) return;
+    if (!nodeToRestore) return;
 
     Node* trash = manager.findChild(manager.root, ".trash");
-    Node* dest = nodeToRestore->originalParent;
+    Node* dest = nullptr;
+
+    if (nodeToRestore->parent == trash) {
+        dest = nodeToRestore->originalParent;
+    } else {
+        Node* topDeletedNode = nodeToRestore;
+        while (topDeletedNode->parent && topDeletedNode->parent != trash) {
+            topDeletedNode = topDeletedNode->parent;
+        }
+        dest = topDeletedNode->originalParent;
+    }
+
+    if (!dest) dest = manager.root;
+
     string finalName = nodeToRestore->name;
 
-    // anti-duplicates yeah
     if (manager.findChild(dest, finalName) != nullptr) {
         string base = finalName;
         string ext = "";
+
         if (!nodeToRestore->isFolder) {
             size_t dot = finalName.find_last_of(".");
             if (dot != string::npos) {
@@ -637,26 +672,34 @@ void MainWindow::applyRestoreLogic(Node* nodeToRestore) {
         finalName = base + " copy " + std::to_string(counter) + ext;
     }
 
-    // move and update
-    nodeToRestore->name = finalName;
-    // bye bye on recycle bin
-    trash->children.erase(std::remove(trash->children.begin(), trash->children.end(), nodeToRestore), trash->children.end());
+    // remove from the actual path
+    if (nodeToRestore->parent) {
+        auto& v = nodeToRestore->parent->children;
+        v.erase(std::remove(v.begin(), v.end(), nodeToRestore), v.end());
+    }
 
-    // back to original father
+    // set new father
     nodeToRestore->parent = dest;
     dest->children.push_back(nodeToRestore);
 
-    if (nodeToRestore->isFavorite) {
-        // if isnt in the list we add mmmm
-        if (!favoriteNodes.contains(nodeToRestore)) {
-            favoriteNodes.append(nodeToRestore);
-        }
-    }
+    logInfo("Restored: [" + QString::fromStdString(nodeToRestore->name) + "] to [" + getPath(dest) + "]");
 
     // update dates
     nodeToRestore->modificationDate = std::time(nullptr);
     dest->modificationDate = std::time(nullptr);
+
+    if (nodeToRestore->isFavorite && !favoriteNodes.contains(nodeToRestore)) {
+        favoriteNodes.append(nodeToRestore);
+    }
+
     updateFavoritesUI();
+}
+
+bool MainWindow::isInTrash(Node* node) {
+    if (!node) return false;
+    Node* trash = manager.findChild(manager.root, ".trash");
+    if (!trash) return false;
+    return isAncestor(trash, node);
 }
 
 void MainWindow::moveNodeLogic(Node* source, Node* destination) {
@@ -722,16 +765,16 @@ void MainWindow::PrincipalWidget_customContextMenuRequested(const QPoint &pos)
     bool itemClicked = false;
 
     if (ui->PrincipalWidget->isVisible() && ui->PrincipalWidget->itemAt(pos)) {
-        selectedNode = (Node*)ui->PrincipalWidget->itemAt(pos)->data(0, Qt::UserRole).value<void*>();
+        selectedNode = reinterpret_cast<Node*>(ui->PrincipalWidget->itemAt(pos)->data(0, Qt::UserRole).value<quintptr>());
         itemClicked = true;
     } else if (ui->iconsWidget->isVisible() && ui->iconsWidget->itemAt(pos)) {
-        selectedNode = (Node*)ui->iconsWidget->itemAt(pos)->data(Qt::UserRole).value<void*>();
+        selectedNode = reinterpret_cast<Node*>(ui->iconsWidget->itemAt(pos)->data(Qt::UserRole).value<quintptr>());
         itemClicked = true;
     }
 
     QMenu menu(this);
     Node* trash = manager.findChild(manager.root, ".trash");
-    bool inTrash = (currentFolder == trash);
+    bool inTrash = isInTrash(currentFolder);
 
     if (inTrash) {
         // recyble bin
@@ -742,6 +785,7 @@ void MainWindow::PrincipalWidget_customContextMenuRequested(const QPoint &pos)
                 applyRestoreLogic(selectedNode);
                 manager.saveBinary("System777.bin");
                 loadFolder(trash);
+                logInfo("'"+QString::fromStdString(selectedNode->name)+"' was restored.");
                 ui->metaDataTreeWidget->clear();
                 this->statusBar()->showMessage("Restored: " + QString::fromStdString(selectedNode->name), 2000);
             });
@@ -749,10 +793,12 @@ void MainWindow::PrincipalWidget_customContextMenuRequested(const QPoint &pos)
             QAction* deletePermAct = menu.addAction("❌ Delete Permanently");
             connect(deletePermAct, &QAction::triggered, this, [=]() {
                 if (QMessageBox::question(this, "Permanent Delete", "This cannot be undone. Delete?") == QMessageBox::Yes) {
+                    QString name = QString::fromStdString(selectedNode->name);
                     ui->metaDataTreeWidget->clear();
                     manager.deleteNode(selectedNode);
                     manager.saveBinary("System777.bin");
                     loadFolder(trash);
+                    logInfo("Permanently Deleted: " + name);
                 }
             });
         } else {
@@ -764,6 +810,7 @@ void MainWindow::PrincipalWidget_customContextMenuRequested(const QPoint &pos)
                 }
                 manager.saveBinary("System777.bin");
                 loadFolder(trash);
+                logInfo("All items restored from Recycle Bin.");
                 ui->metaDataTreeWidget->clear();
                 this->statusBar()->showMessage("All items restored successfully", 2000);
             });
@@ -776,6 +823,7 @@ void MainWindow::PrincipalWidget_customContextMenuRequested(const QPoint &pos)
                     }
                     manager.saveBinary("System777.bin");
                     loadFolder(trash);
+                    logInfo("Recycle Bin Emptied.");
                     ui->metaDataTreeWidget->clear();
                 }
             });
@@ -826,18 +874,23 @@ void MainWindow::PrincipalWidget_customContextMenuRequested(const QPoint &pos)
                                                           QString::fromStdString(nameToEdit), &ok).trimmed();
 
                 if (ok) {
-                    // new security validation [help me pls]
                     string illegal = "*?<>|/\\:\"";
                     bool hasIllegal = false;
                     for(char c : illegal) if(inputName.contains(c)) hasIllegal = true;
 
-                    if (inputName.isEmpty() || inputName == "." || inputName == ".." || hasIllegal) {
-                        QMessageBox::critical(this, "Error", "Invalid name! Dont use special characters.");
+                    bool isRestrictedOnly = !inputName.isEmpty();
+                    for(QChar c : inputName) {
+                        if(c != '.' && c != ',') {
+                            isRestrictedOnly = false;
+                            break;
+                        }
+                    }
+                    if (inputName.isEmpty() || isRestrictedOnly || hasIllegal) {
+                        QMessageBox::critical(this, "Error", "Invalid name! Do not use special characters.");
                         return;
                     }
 
                     std::string newName = inputName.toStdString();
-                    // extensions case
                     if (selectedNode->isFolder) {
                         if (newName.length() >= 4 && newName.substr(newName.length() - 4) == ".txt")
                             newName = newName.substr(0, newName.length() - 4);
@@ -850,7 +903,9 @@ void MainWindow::PrincipalWidget_customContextMenuRequested(const QPoint &pos)
                     if (duplicate != nullptr && duplicate != selectedNode) {
                         QMessageBox::warning(this, "Error", "There is already an element with this name!");
                     } else {
+                        string oldName = selectedNode->name;
                         manager.renameNode(selectedNode, newName);
+                        logInfo("Renamed: [" + QString::fromStdString(oldName) + "] to [" + QString::fromStdString(newName) + "]");
 
                         time_t now = std::time(nullptr);
                         selectedNode->modificationDate = now;
@@ -859,7 +914,8 @@ void MainWindow::PrincipalWidget_customContextMenuRequested(const QPoint &pos)
                             selectedNode->parent->modificationDate = now;
                         }
                         manager.saveBinary("System777.bin");
-                        loadFolder(currentFolder, false);
+                        Node* folderToRefresh = selectedNode->parent ? selectedNode->parent : manager.root;
+                        loadFolder(folderToRefresh, false);
                         updateFavoritesUI();
                         updateMetadata(selectedNode);
                     }
@@ -872,30 +928,50 @@ void MainWindow::PrincipalWidget_customContextMenuRequested(const QPoint &pos)
                 Node* trash = manager.findChild(manager.root, ".trash");
                 if (!selectedNode || selectedNode == manager.root || selectedNode == trash) return;
 
+                string finalName = selectedNode->name;
+
+                if (manager.findChild(trash, finalName) != nullptr) {
+                    string base = finalName;
+                    string ext = "";
+
+                    if (!selectedNode->isFolder) {
+                        size_t dot = finalName.find_last_of(".");
+                        if (dot != string::npos) {
+                            base = finalName.substr(0, dot);
+                            ext = finalName.substr(dot);
+                        }
+                    }
+
+                    int counter = 1;
+                    while (manager.findChild(trash, base + " " + std::to_string(counter) + ext) != nullptr) {
+                        counter++;
+                    }
+                    finalName = base + " " + std::to_string(counter) + ext;
+                }
+                selectedNode->name = finalName;
+
                 if (selectedNode == nodeToCopy) {
                     nodeToCopy = nullptr;
                     this->statusBar()->showMessage("Copy operation cancelled! [source deleted]", 2000);
                 }
 
-                favoriteNodes.removeAll(selectedNode); // remove from the temporal list
-
+                favoriteNodes.removeAll(selectedNode);
+                QString name = QString::fromStdString(selectedNode->name);
                 selectedNode->originalParent = selectedNode->parent;
                 if (selectedNode->parent) {
                     auto& v = selectedNode->parent->children;
                     v.erase(std::remove(v.begin(), v.end(), selectedNode), v.end());
-                }
-
-                if (selectedNode->parent) {
                     selectedNode->parent->modificationDate = std::time(nullptr);
                 }
-                trash->modificationDate = std::time(nullptr);
 
+                trash->modificationDate = std::time(nullptr);
                 selectedNode->parent = trash;
                 trash->children.push_back(selectedNode);
 
                 updateFavoritesUI();
                 manager.saveBinary("System777.bin");
                 loadFolder(currentFolder, false);
+                logInfo("Moved to Recycle Bin: " + name);
             });
 
             menu.addSeparator();
@@ -906,6 +982,7 @@ void MainWindow::PrincipalWidget_customContextMenuRequested(const QPoint &pos)
                     favoriteNodes.append(selectedNode);
                     updateFavoritesUI();
                     manager.saveBinary("System777.bin");
+                    logInfo("Added to Favorites: " + getPath(selectedNode));
                     this->statusBar()->showMessage("Added to favorites", 2000);
                 } else {
                     QMessageBox::critical(this, "Favorites", "'" + QString::fromStdString(selectedNode->name) + "' is already in your favorites!");
@@ -932,6 +1009,7 @@ void MainWindow::PrincipalWidget_customContextMenuRequested(const QPoint &pos)
                 manager.isIconMode = false;
                 manager.saveBinary("System777.bin");
                 loadFolder(currentFolder);
+                logInfo("View Mode changed to: LIST");
             });
 
             connect(viewIconsAct, &QAction::triggered, this, [=]() {
@@ -940,6 +1018,7 @@ void MainWindow::PrincipalWidget_customContextMenuRequested(const QPoint &pos)
                 manager.isIconMode = true;
                 manager.saveBinary("System777.bin");
                 loadFolder(currentFolder);
+                logInfo("View Mode changed to: ICONS");
             });
 
             viewMenu->addSeparator();
@@ -960,8 +1039,8 @@ void MainWindow::PrincipalWidget_customContextMenuRequested(const QPoint &pos)
                     manager.iconSize = sizeValue;
                     applyIconSize(sizeValue);
                     manager.saveBinary("System777.bin");
-                    // Forzamos un refresco visual para que Qt reajuste el layout
                     loadFolder(currentFolder, false);
+                    logInfo("Icon size changed to: " + label + " (" + QString::number(sizeValue) + "px)");
                 });
             };
 
@@ -990,8 +1069,16 @@ void MainWindow::PrincipalWidget_customContextMenuRequested(const QPoint &pos)
                     bool hasIllegal = false;
                     for(char c : illegal) if(name.contains(c)) hasIllegal = true;
 
-                    if (name.isEmpty() || name == "." || name == ".." || hasIllegal) {
-                        QMessageBox::critical(this, "Error", "Invalid name! Dont use special characters.");
+                    bool isRestrictedOnly = !name.isEmpty();
+                    for(QChar c : name) {
+                        if(c != '.' && c != ',') {
+                            isRestrictedOnly = false;
+                            break;
+                        }
+                    }
+
+                    if (name.isEmpty() || isRestrictedOnly || hasIllegal) {
+                        QMessageBox::critical(this, "Error", "Invalid name! Do not use special characters.");
                         return;
                     }
 
@@ -1008,6 +1095,7 @@ void MainWindow::PrincipalWidget_customContextMenuRequested(const QPoint &pos)
                     manager.addNode(currentFolder, finalName, false);
                     manager.saveBinary("System777.bin");
                     loadFolder(currentFolder, false);
+                    logInfo("File Created: " + QString::fromStdString(finalName) + " in " + getPath(currentFolder));
                 }
             });
 
@@ -1024,8 +1112,16 @@ void MainWindow::PrincipalWidget_customContextMenuRequested(const QPoint &pos)
                     bool hasIllegal = false;
                     for(char c : illegal) if(name.contains(c)) hasIllegal = true;
 
-                    if (name.isEmpty() || name == "." || name == ".." || hasIllegal) {
-                        QMessageBox::critical(this, "Error", "Invalid name! Dont use special characters.");
+                    bool isRestrictedOnly = !name.isEmpty();
+                    for(QChar c : name) {
+                        if(c != '.' && c != ',') {
+                            isRestrictedOnly = false;
+                            break;
+                        }
+                    }
+
+                    if (name.isEmpty() || isRestrictedOnly || hasIllegal) {
+                        QMessageBox::critical(this, "Error", "Invalid name! Do not use special characters.");
                         return;
                     }
 
@@ -1042,6 +1138,7 @@ void MainWindow::PrincipalWidget_customContextMenuRequested(const QPoint &pos)
                     manager.addNode(currentFolder, finalName, true);
                     manager.saveBinary("System777.bin");
                     loadFolder(currentFolder, false);
+                    logInfo("Folder Created: " + QString::fromStdString(finalName) + " in " + getPath(currentFolder));
                     updateFavoritesUI();
                 }
             });
@@ -1054,7 +1151,7 @@ void MainWindow::on_favoritesTreeView_customContextMenuRequested(const QPoint &p
     QModelIndex index = ui->favoritesTreeView->indexAt(pos);
     if (!index.isValid()) return;
 
-    Node* selectedNode = (Node*)index.data(Qt::UserRole).value<void*>();
+    Node* selectedNode = reinterpret_cast<Node*>(index.data(Qt::UserRole).value<quintptr>());
     if (!selectedNode) return;
 
     if (index.data(Qt::UserRole + 1).toBool()) return;
@@ -1073,3 +1170,7 @@ void MainWindow::on_favoritesTreeView_customContextMenuRequested(const QPoint &p
     menu.exec(ui->favoritesTreeView->viewport()->mapToGlobal(pos));
 }
 
+void MainWindow::logInfo(QString message) {
+    QString timestamp = QDateTime::currentDateTime().toString("MM/dd/yyyy hh:mm:ss");
+    cout << timestamp.toStdString() << " - [LOG] " << message.toStdString() << endl;
+}
